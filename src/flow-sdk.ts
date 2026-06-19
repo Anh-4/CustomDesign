@@ -46,6 +46,41 @@ export const MODELS_BY_PROVIDER: Record<Provider, ImageModel[]> = {
 };
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
+
+/**
+ * Tải danh sách model SINH/CHỈNH ẢNH mà OpenRouter hỗ trợ (output_modalities có 'image').
+ * App này chỉ edit ảnh nên lọc bỏ các model text-only (chọn cũng không ra ảnh).
+ * key: truyền vào để gắn Authorization (catalog vốn public, key chỉ để cá nhân hoá nếu có).
+ */
+export async function fetchOpenRouterImageModels(key?: string): Promise<ImageModel[]> {
+  const headers: Record<string, string> = {};
+  if (key) headers.Authorization = `Bearer ${key}`;
+
+  const res = await fetch(OPENROUTER_MODELS_URL, { headers });
+  if (!res.ok) {
+    let msg = `OpenRouter lỗi ${res.status} khi tải danh sách model`;
+    try { const j = await res.json(); msg = j?.error?.message || msg; } catch {}
+    throw new Error(msg);
+  }
+
+  const data = await res.json();
+  const list: any[] = data?.data ?? [];
+  const imageModels = list
+    .filter((m) => {
+      const out = m?.architecture?.output_modalities;
+      return Array.isArray(out) && out.includes('image');
+    })
+    .map((m) => ({ id: String(m.id), label: String(m.name || m.id) }));
+
+  // Ưu tiên các model có 'image' trong id (gemini image/nano banana, gpt image...) lên đầu, còn lại A→Z.
+  imageModels.sort((a, b) => {
+    const pa = /image|banana/i.test(a.id) ? 0 : 1;
+    const pb = /image|banana/i.test(b.id) ? 0 : 1;
+    return pa !== pb ? pa - pb : a.label.localeCompare(b.label);
+  });
+  return imageModels;
+}
 const geminiUrl = (model: string, key: string): string =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
 

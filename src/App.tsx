@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Flow, MODELS_BY_PROVIDER, CUSTOM_MODEL_ID, Provider, DEFAULT_PROVIDER, getProviderInfo } from './flow-sdk';
+import { Flow, MODELS_BY_PROVIDER, CUSTOM_MODEL_ID, Provider, DEFAULT_PROVIDER, getProviderInfo, ImageModel, fetchOpenRouterImageModels } from './flow-sdk';
 import { Dropdown, LineInput, SectionLabel, ColorField, ZoomModal } from './components/Primitives';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { InputState, GeneratedResult, MediaItem } from './types';
@@ -151,8 +151,40 @@ export default function App() {
   const [model, setModel] = useState<string>(MODELS_BY_PROVIDER[provider][0].id);
   const [customModel, setCustomModel] = useState('');
 
-  // Đổi provider: đảm bảo model thuộc danh sách của provider mới.
+  // Danh sách model OpenRouter tải động từ key (lọc model xuất ảnh được). null = dùng list cứng.
+  const [orModels, setOrModels] = useState<ImageModel[] | null>(null);
+  const [orLoading, setOrLoading] = useState(false);
+  const [orError, setOrError] = useState<string | null>(null);
+
+  // Lấy key OpenRouter hiện có (env build hoặc localStorage).
+  const orKey = (): string =>
+    (((import.meta as any).env?.VITE_OPENROUTER_API_KEY as string) || readKeyFor('openrouter') || '').trim();
+
+  /** Tải danh sách model ảnh từ OpenRouter theo key đã nhập, và chọn lại model hợp lệ. */
+  const loadOrModels = async () => {
+    setOrError(null);
+    setOrLoading(true);
+    try {
+      const list = await fetchOpenRouterImageModels(orKey());
+      setOrModels(list);
+      // Giữ model đang chọn nếu còn trong list; không thì về model đầu danh sách.
+      setModel((cur) => (cur === CUSTOM_MODEL_ID || list.some((m) => m.id === cur) ? cur : (list[0]?.id ?? cur)));
+    } catch (e: any) {
+      setOrModels(null);
+      setOrError(e?.message || 'Không tải được danh sách model.');
+    } finally {
+      setOrLoading(false);
+    }
+  };
+
+  // Đổi provider: openrouter + có key -> tải list động; còn lại -> dùng list cứng.
   useEffect(() => {
+    if (provider === 'openrouter' && orKey()) {
+      loadOrModels();
+      return;
+    }
+    setOrModels(null);
+    setOrError(null);
     const list = MODELS_BY_PROVIDER[provider];
     setModel((cur) => (cur === CUSTOM_MODEL_ID || list.some((m) => m.id === cur) ? cur : list[0].id));
   }, [provider]);
@@ -171,6 +203,8 @@ export default function App() {
     } catch {}
     setProvider(p);
     setApiKeyModalOpen(false);
+    // Vừa nhập key OpenRouter -> tải lại danh sách model key này gọi được.
+    if (p === 'openrouter') loadOrModels();
   };
 
   // Chọn ảnh cho ô design (1) hoặc ô ảnh thay thế (4).
@@ -253,8 +287,10 @@ export default function App() {
     Flow.download({ base64: r.base64, mimeType: r.mimeType, filename: `custom-design-${Date.now()}.${ext}` });
   };
 
+  // OpenRouter: ưu tiên list tải động từ key; các provider khác / chưa tải xong -> list cứng.
+  const activeList = provider === 'openrouter' && orModels ? orModels : MODELS_BY_PROVIDER[provider];
   const modelItems = [
-    ...MODELS_BY_PROVIDER[provider].map((m) => ({ value: m.id, label: m.label })),
+    ...activeList.map((m) => ({ value: m.id, label: m.label })),
     { value: CUSTOM_MODEL_ID, label: 'Khác (nhập model ID)…' },
   ];
 
@@ -365,6 +401,28 @@ export default function App() {
           </div>
 
           <Dropdown label="Model AI" value={model} items={modelItems} onChange={setModel} />
+          {provider === 'openrouter' && (
+            <div className="flex items-center gap-2 ml-2 -mt-0.5">
+              <span className="text-[10px] text-white/35 leading-tight flex-1">
+                {orLoading
+                  ? 'Đang tải model từ key OpenRouter…'
+                  : orError
+                  ? `Không tải được list, dùng mặc định (${orError})`
+                  : orModels
+                  ? `${orModels.length} model ảnh khả dụng từ key của bạn`
+                  : 'Nhập key OpenRouter để tải toàn bộ model khả dụng'}
+              </span>
+              <button
+                onClick={loadOrModels}
+                disabled={orLoading || !orKey()}
+                className="text-[10px] text-amber-400/80 hover:text-amber-400 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-0.5"
+                title="Tải lại danh sách model"
+              >
+                <span className={`material-symbols-outlined text-[13px] ${orLoading ? 'animate-spin' : ''}`}>refresh</span>
+                Tải lại
+              </button>
+            </div>
+          )}
           {model === CUSTOM_MODEL_ID && (
             <input
               value={customModel}
