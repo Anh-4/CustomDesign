@@ -42,7 +42,7 @@ export const MODELS_BY_PROVIDER: Record<Provider, ImageModel[]> = {
     { id: 'google/gemini-3-pro-image-preview', label: '🍌 Nano Banana Pro' },
     { id: 'google/gemini-2.5-flash-image',     label: '🍌 Nano Banana / Flash' },
     { id: 'openai/gpt-5.4-image-2',            label: 'GPT Image (OpenAI)' },
-    { id: 'bytedance-seed/seedream-4.5',       label: 'Seedream 4.5 (ByteDance)' },
+    { id: 'x-ai/grok-imagine-image-quality',   label: 'xAI: Grok Imagine Image Quality' },
   ],
   gemini: [
     { id: 'gemini-3-pro-image-preview', label: '🍌 Nano Banana Pro' },
@@ -56,6 +56,12 @@ export const MODELS_BY_PROVIDER: Record<Provider, ImageModel[]> = {
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
+
+// Model ảnh có trên OpenRouter nhưng CHƯA xuất hiện trong /models public (vẫn gọi được bằng key).
+// -> bơm thêm vào dropdown động. VD: Grok Imagine (modality text+image->image, sửa ảnh được).
+const OR_EXTRA_IMAGE_MODELS: ImageModel[] = [
+  { id: 'x-ai/grok-imagine-image-quality', label: 'xAI: Grok Imagine Image Quality' },
+];
 
 /**
  * Tải danh sách model SINH/CHỈNH ẢNH mà OpenRouter hỗ trợ (output_modalities có 'image').
@@ -87,7 +93,12 @@ export async function fetchOpenRouterImageModels(key?: string): Promise<ImageMod
       label: String(m.name || m.id) + (m?.top_provider?.is_moderated ? ' · có kiểm duyệt' : ''),
     }));
 
-  // Ưu tiên các model có 'image' trong id (gemini image/nano banana, gpt image...) lên đầu, còn lại A→Z.
+  // Bơm thêm các model ảnh còn thiếu trong catalog public (vd Grok Imagine) nếu chưa có.
+  for (const e of OR_EXTRA_IMAGE_MODELS) {
+    if (!imageModels.some((m) => m.id === e.id)) imageModels.push({ ...e });
+  }
+
+  // Ưu tiên các model có 'image' trong id (gemini image/nano banana, gpt image, grok imagine...) lên đầu, còn lại A→Z.
   imageModels.sort((a, b) => {
     const pa = /image|banana/i.test(a.id) ? 0 : 1;
     const pb = /image|banana/i.test(b.id) ? 0 : 1;
