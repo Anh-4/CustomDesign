@@ -62,10 +62,13 @@ REFERENCE IMAGES (in this EXACT order):
     : '';
 
   const rules = `\n\nSTRICT RULES:
+- IDENTICAL OUTPUT (most important): the output MUST be the EXACT original design from IMAGE 1, completely unchanged, EXCEPT only the specific text/number/image elements listed under CHANGES. Reproduce every other pixel, element, color, position, spacing, proportion and the background EXACTLY as in IMAGE 1.
+- DO NOT ADD anything new: no extra graphics, characters, mascots, shapes, icons, decorations, patterns, stars, sparkles, shadows, highlights, gradients, borders, frames, textures, watermarks or background elements that are not already in IMAGE 1.
+- DO NOT REMOVE or omit any existing element of IMAGE 1.
+- DO NOT redraw, re-illustrate, restyle, recolor, move, resize, "improve", clean up or reinterpret the artwork; keep the exact same line weight, coloring, art style and layout.
 - TEXT FIDELITY (critical): any replacement text MUST appear in the output EXACTLY as the user typed it — character-for-character, including identical spelling, letter case, spaces, punctuation, special symbols and accent marks/diacritics. Do not "fix", localize, translate or beautify the text. If you cannot render a character faithfully, render it as-is rather than substituting it.
-- BRAND / TRADEMARK FIDELITY: this is the user's own commercial print-on-demand design. Faithfully keep and reproduce every existing logo, brand mark, emblem, character and trademarked element already present in IMAGE 1 exactly as shown — do NOT remove, blur, censor, simplify, replace or refuse them. Only the elements listed under CHANGES are modified; everything else (including brand elements) stays identical.
-- Do NOT redesign, restyle, recolor, move, add or remove ANY part of the original design other than the elements explicitly listed under CHANGES.
-- Preserve IMAGE 1's exact aspect ratio, resolution, framing and crop — the output must look like the SAME design with only the requested elements swapped.
+- BRAND / TRADEMARK FIDELITY: this is the user's own commercial print-on-demand design. Faithfully keep and reproduce every existing logo, brand mark, emblem, character and trademarked element already present in IMAGE 1 exactly as shown — do NOT remove, blur, censor, simplify, replace or refuse them.
+- Preserve IMAGE 1's exact aspect ratio, resolution, framing, crop and background — the output must look like the SAME design with ONLY the requested elements swapped.
 - Keep the original's print quality: crisp edges, the same effects/filters/grain, suitable for high-resolution printing.
 - Output ONE single, clean, high-resolution image of the edited design ONLY. Do NOT show IMAGE 2 separately, no borders, no extra text, no watermark.`;
 

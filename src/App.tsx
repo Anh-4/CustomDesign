@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Flow, MODELS_BY_PROVIDER, CUSTOM_MODEL_ID, Provider, DEFAULT_PROVIDER, getProviderInfo, ImageModel, fetchOpenRouterImageModels } from './flow-sdk';
+import { Flow, MODELS_BY_PROVIDER, CUSTOM_MODEL_ID, Provider, DEFAULT_PROVIDER, getProviderInfo, ImageModel, fetchOpenRouterImageModels, cutoutBackgroundToPng } from './flow-sdk';
 import { Dropdown, LineInput, SectionLabel, ColorField, ZoomModal } from './components/Primitives';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { InputState, GeneratedResult, MediaItem } from './types';
@@ -284,9 +284,16 @@ export default function App() {
     runBatch(provider, effectiveModel, (i) => buildCustomPrompt(spec, i), refs);
   };
 
-  const download = (r: GeneratedResult) => {
-    const ext = (r.mimeType.split('/')[1] || 'png').replace('jpeg', 'jpg');
-    Flow.download({ base64: r.base64, mimeType: r.mimeType, filename: `custom-design-${Date.now()}.${ext}` });
+  // Tải PNG nền trong suốt: xoá nền (flood-fill từ mép) rồi xuất PNG có alpha.
+  // Lỗi xử lý -> fallback tải ảnh gốc (có nền).
+  const download = async (r: GeneratedResult) => {
+    try {
+      const pngBase64 = await cutoutBackgroundToPng(r.base64, r.mimeType);
+      await Flow.download({ base64: pngBase64, mimeType: 'image/png', filename: `custom-design-${Date.now()}.png` });
+    } catch {
+      const ext = (r.mimeType.split('/')[1] || 'png').replace('jpeg', 'jpg');
+      await Flow.download({ base64: r.base64, mimeType: r.mimeType, filename: `custom-design-${Date.now()}.${ext}` });
+    }
   };
 
   // OpenRouter: ưu tiên list tải động từ key; các provider khác / chưa tải xong -> list cứng.
@@ -464,7 +471,7 @@ export default function App() {
         {hasOutput ? (
           <>
             <div className="px-5 pt-4 pb-1 text-[11px] text-white/40">
-              Chọn mẫu ưng ý → bấm <span className="text-amber-400">Tải PNG</span> ở góc mỗi mẫu (chất lượng cao, in ấn được). Bấm vào ảnh để phóng to.
+              Chọn mẫu ưng ý → bấm <span className="text-amber-400">Tải PNG</span> ở góc mỗi mẫu (nền trong suốt, chất lượng cao, in ấn được). Bấm vào ảnh để phóng to.
             </div>
             <div className="flex-1 grid grid-cols-2 gap-3 p-4 pt-2 min-h-0">
               {Array.from({ length: NUM_OPTIONS }, (_, i) => (

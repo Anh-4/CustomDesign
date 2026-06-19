@@ -313,6 +313,67 @@ async function generateWithXAI(opts: GenOpts, key: string): Promise<MediaResult>
   throw new Error('xAI không trả về ảnh. Thử lại hoặc đổi mô tả.');
 }
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Lỗi tải ảnh để xử lý nền'));
+    img.src = src;
+  });
+}
+
+/**
+ * Xoá nền -> PNG trong suốt. Flood-fill từ 4 mép ảnh: pixel nào gần màu nền (lấy trung bình 4 góc)
+ * trong ngưỡng `tolerance` VÀ nối liền với mép -> đặt alpha = 0. Chỉ bỏ nền bao quanh, KHÔNG đụng
+ * các vùng cùng màu nằm bên trong design. Trả base64 của ảnh PNG (có alpha).
+ */
+export async function cutoutBackgroundToPng(base64: string, mimeType: string, tolerance = 40): Promise<string> {
+  const img = await loadImage(`data:${mimeType};base64,${base64}`);
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Không tạo được canvas');
+  ctx.drawImage(img, 0, 0);
+
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+
+  // Màu nền = trung bình 4 góc.
+  const corners = [0, (w - 1) * 4, (h - 1) * w * 4, ((h - 1) * w + (w - 1)) * 4];
+  let br = 0, bg = 0, bb = 0;
+  for (const c of corners) { br += d[c]; bg += d[c + 1]; bb += d[c + 2]; }
+  br /= 4; bg /= 4; bb /= 4;
+
+  const tol2 = tolerance * tolerance * 3; // ngưỡng bình phương khoảng cách màu (3 kênh)
+  const isBg = (p: number) => {
+    const o = p * 4;
+    const dr = d[o] - br, dg = d[o + 1] - bg, db = d[o + 2] - bb;
+    return dr * dr + dg * dg + db * db <= tol2;
+  };
+
+  const visited = new Uint8Array(w * h);
+  const stack: number[] = [];
+  for (let x = 0; x < w; x++) { stack.push(x); stack.push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { stack.push(y * w); stack.push(y * w + (w - 1)); }
+
+  while (stack.length) {
+    const p = stack.pop()!;
+    if (visited[p]) continue;
+    visited[p] = 1;
+    if (!isBg(p)) continue;
+    d[p * 4 + 3] = 0; // trong suốt
+    const x = p % w, y = (p - x) / w;
+    if (x > 0) stack.push(p - 1);
+    if (x < w - 1) stack.push(p + 1);
+    if (y > 0) stack.push(p - w);
+    if (y < h - 1) stack.push(p + w);
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  return canvas.toDataURL('image/png').split(',')[1] || '';
+}
+
 export const Flow = {
   media: {
     // filter giữ lại cho tương thích chữ ký gốc, hiện luôn lọc ảnh.
