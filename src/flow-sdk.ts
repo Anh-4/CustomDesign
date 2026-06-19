@@ -41,6 +41,7 @@ export const MODELS_BY_PROVIDER: Record<Provider, ImageModel[]> = {
   openrouter: [
     { id: 'google/gemini-3-pro-image-preview', label: '🍌 Nano Banana Pro' },
     { id: 'google/gemini-2.5-flash-image',     label: '🍌 Nano Banana / Flash' },
+    { id: 'black-forest-labs/flux.2-pro',      label: 'FLUX.2 Pro (BFL)' },
     { id: 'openai/gpt-5.4-image-2',            label: 'GPT Image (OpenAI)' },
     { id: 'x-ai/grok-imagine-image-quality',   label: 'xAI: Grok Imagine Image Quality' },
   ],
@@ -60,7 +61,10 @@ const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 // Model ảnh có trên OpenRouter nhưng CHƯA xuất hiện trong /models public (vẫn gọi được bằng key).
 // -> bơm thêm vào dropdown động. VD: Grok Imagine (modality text+image->image, sửa ảnh được).
 const OR_EXTRA_IMAGE_MODELS: ImageModel[] = [
-  { id: 'x-ai/grok-imagine-image-quality', label: 'xAI: Grok Imagine Image Quality' },
+  { id: 'black-forest-labs/flux.2-pro',     label: 'FLUX.2 Pro (BFL)' },
+  { id: 'black-forest-labs/flux.2-max',     label: 'FLUX.2 Max (BFL)' },
+  { id: 'black-forest-labs/flux.2-flex',    label: 'FLUX.2 Flex (BFL)' },
+  { id: 'x-ai/grok-imagine-image-quality',  label: 'xAI: Grok Imagine Image Quality' },
 ];
 
 /**
@@ -98,10 +102,10 @@ export async function fetchOpenRouterImageModels(key?: string): Promise<ImageMod
     if (!imageModels.some((m) => m.id === e.id)) imageModels.push({ ...e });
   }
 
-  // Ưu tiên các model có 'image' trong id (gemini image/nano banana, gpt image, grok imagine...) lên đầu, còn lại A→Z.
+  // Ưu tiên các model ảnh tốt (gemini image/nano banana, flux, gpt image, grok imagine...) lên đầu.
   imageModels.sort((a, b) => {
-    const pa = /image|banana/i.test(a.id) ? 0 : 1;
-    const pb = /image|banana/i.test(b.id) ? 0 : 1;
+    const pa = /image|banana|flux/i.test(a.id) ? 0 : 1;
+    const pb = /image|banana|flux/i.test(b.id) ? 0 : 1;
     return pa !== pb ? pa - pb : a.label.localeCompare(b.label);
   });
 
@@ -174,6 +178,8 @@ type GenOpts = {
 /** Sinh ảnh qua OpenRouter (chat-completions, modalities image). */
 async function generateWithOpenRouter(opts: GenOpts, key: string): Promise<MediaResult> {
   const isGrok = /grok|imagine/i.test(opts.model);
+  // Model chỉ xuất 'image' (Grok, FLUX) -> chỉ yêu cầu ['image']; nếu kèm 'text' sẽ lỗi modalities.
+  const imageOnlyOut = isGrok || /flux/i.test(opts.model);
   const content: any[] = [{ type: 'text', text: opts.prompt }];
   for (const id of opts.referenceImageMediaIds ?? []) {
     const m = registry.get(id);
@@ -193,7 +199,7 @@ async function generateWithOpenRouter(opts: GenOpts, key: string): Promise<Media
     body: JSON.stringify({
       model: opts.model,
       messages: [{ role: 'user', content }],
-      modalities: isGrok ? ['image'] : ['image', 'text'],
+      modalities: imageOnlyOut ? ['image'] : ['image', 'text'],
       // Grok: temperature vừa phải -> 2 mẫu khác nhau (để bấm tạo lại chọn bản sạch), vẫn đủ bám.
       ...(isGrok ? { temperature: 0.4 } : {}),
       ...(opts.aspectRatio ? { image_config: { aspect_ratio: opts.aspectRatio } } : {}),

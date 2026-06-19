@@ -21,7 +21,7 @@ Cùng stack với `design-transfer` / `apparel-video`: Vite + React + TS + Tailw
 ## Provider & model
 
 Chọn ở popup **"Đổi API Key"**:
-- **OpenRouter** — dropdown model tải động theo key (lọc model xuất ảnh được), gồm Nano Banana, GPT Image và **Grok Imagine** (`x-ai/grok-imagine-image-quality`, sửa ảnh được).
+- **OpenRouter** — dropdown model tải động theo key (lọc model xuất ảnh được), gồm Nano Banana, **FLUX.2** (`black-forest-labs/flux.2-*`, dòng Kontext chuyên sửa-giữ-nguyên, thoáng trademark), GPT Image và **Grok Imagine**.
 - **Google Gemini** — Nano Banana (gọi trực tiếp).
 - **xAI Grok** — `grok-imagine-image-quality` qua `/v1/images/edits` (cần key https://console.x.ai).
 
