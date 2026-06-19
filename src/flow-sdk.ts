@@ -203,14 +203,45 @@ async function generateWithOpenRouter(opts: GenOpts, key: string): Promise<Media
   }
 
   const data = await res.json();
-  const message = data?.choices?.[0]?.message;
-  const url: string | undefined = message?.images?.[0]?.image_url?.url;
-  const parsed = url ? /^data:([^;]+);base64,(.*)$/.exec(url) : null;
-  if (parsed) return storeResult(parsed[1], parsed[2]);
+  const choice = data?.choices?.[0];
+  const message = choice?.message;
 
-  // Không có ảnh -> lấy text (thường là lý do từ chối/an toàn) làm thông báo lỗi.
-  const txt = typeof message?.content === 'string' ? message.content : '';
-  throw new Error(txt || 'OpenRouter không trả về ảnh. Thử lại, đổi mô tả hoặc đổi model.');
+  // Tìm ảnh: (1) message.images[].image_url.url, (2) trong content dạng mảng part image.
+  let url: string | undefined = message?.images?.[0]?.image_url?.url;
+  if (!url && Array.isArray(message?.content)) {
+    const part = message.content.find((p: any) => p?.type === 'image_url' || p?.image_url);
+    url = part?.image_url?.url || part?.url;
+  }
+  if (url) {
+    const parsed = /^data:([^;]+);base64,(.*)$/.exec(url);
+    if (parsed) return storeResult(parsed[1], parsed[2]);
+    // URL http(s) -> tải về rồi chuyển base64.
+    const r = await fetch(url);
+    if (r.ok) {
+      const blob = await r.blob();
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error || new Error('Lỗi đọc ảnh'));
+        reader.readAsDataURL(blob);
+      });
+      const m2 = /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
+      if (m2) return storeResult(m2[1], m2[2]);
+    }
+  }
+
+  // Không có ảnh -> dựng lý do RÕ RÀNG để hiển thị (giúp biết bị chặn an toàn hay từ chối).
+  const textPart =
+    typeof message?.content === 'string'
+      ? message.content
+      : Array.isArray(message?.content)
+      ? message.content.map((p: any) => (typeof p === 'string' ? p : p?.text)).filter(Boolean).join(' ')
+      : '';
+  const reason = message?.refusal || textPart || data?.error?.message;
+  const fr = choice?.finish_reason || choice?.native_finish_reason;
+  const frNote = fr ? ` [${fr}]` : '';
+  if (reason) throw new Error(`Model không trả ảnh${frNote}: ${String(reason).slice(0, 300)}`);
+  throw new Error(`OpenRouter không trả về ảnh${frNote}. Có thể model đã CHẶN nội dung (bản quyền/an toàn) — thử model khác (vd Grok Imagine) hoặc đổi mô tả.`);
 }
 
 /** Sinh ảnh qua Google Gemini API trực tiếp (generateContent). */
