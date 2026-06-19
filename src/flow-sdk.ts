@@ -173,6 +173,7 @@ type GenOpts = {
 
 /** Sinh ảnh qua OpenRouter (chat-completions, modalities image). */
 async function generateWithOpenRouter(opts: GenOpts, key: string): Promise<MediaResult> {
+  const isGrok = /grok|imagine/i.test(opts.model);
   const content: any[] = [{ type: 'text', text: opts.prompt }];
   for (const id of opts.referenceImageMediaIds ?? []) {
     const m = registry.get(id);
@@ -188,10 +189,12 @@ async function generateWithOpenRouter(opts: GenOpts, key: string): Promise<Media
     },
     // Modalities phải khớp model: Grok Imagine chỉ hỗ trợ output 'image' -> kèm 'text' sẽ lỗi
     // "No endpoints ... output modalities: image, text". Các model khác (Nano Banana/GPT) cần cả 'text'.
+    // Grok hay "vẽ thêm" -> hạ temperature để bám design gốc hơn (đỡ sáng tạo).
     body: JSON.stringify({
       model: opts.model,
       messages: [{ role: 'user', content }],
-      modalities: /grok|imagine/i.test(opts.model) ? ['image'] : ['image', 'text'],
+      modalities: isGrok ? ['image'] : ['image', 'text'],
+      ...(isGrok ? { temperature: 0.1 } : {}),
       ...(opts.aspectRatio ? { image_config: { aspect_ratio: opts.aspectRatio } } : {}),
     }),
   });
