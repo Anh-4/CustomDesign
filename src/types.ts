@@ -10,10 +10,14 @@ export interface InputState {
   designImage: MediaItem | null;
   // Ô 2: text mới để thay vào design (giữ nguyên font/style/vị trí gốc).
   newText: string;
+  // Ô 2b: text GỐC đang có trong design cần thay (giúp AI tìm đúng chỗ khi nhận nhầm).
+  origText: string;
   // Ô 3: số mới để thay vào design.
   newNumber: string;
   // Ô 4: ảnh thay thế (PNG/JPG) — thay vào vị trí ảnh có sẵn trong design.
   replaceImage: MediaItem | null;
+  // Mô tả nhân vật/số cần thay (giúp AI nhận diện đúng phần cần thay khi nhận nhầm).
+  targetDesc: string;
   // Ô 5: bảng màu — ép màu chữ/số khi AI tô sai (mỗi cái bật/tắt độc lập).
   useTextColor: boolean;
   textColor: string;   // hex #rrggbb

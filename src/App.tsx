@@ -117,8 +117,10 @@ export default function App() {
   const [inputs, setInputs] = useState<InputState>({
     designImage: null,
     newText: '',
+    origText: '',
     newNumber: '',
     replaceImage: null,
+    targetDesc: '',
     useTextColor: false,
     textColor: '#ffffff',
     useNumberColor: false,
@@ -209,8 +211,10 @@ export default function App() {
 
     const spec = {
       newText: inputs.newText.trim(),
+      origText: inputs.origText.trim(),
       newNumber: inputs.newNumber.trim(),
       hasReplacementImage: !!inputs.replaceImage,
+      targetDesc: inputs.targetDesc.trim(),
       textColor: inputs.useTextColor ? inputs.textColor : null,
       numberColor: inputs.useNumberColor ? inputs.numberColor : null,
     };
@@ -278,14 +282,25 @@ export default function App() {
             onZoom={setZoomImage}
           />
 
-          {/* Ô 2 — Text mới */}
-          <div className="flex flex-col gap-1.5">
-            <FieldHead index={2} title="Text mới" desc="Thay phần chữ trong design (giữ font/vị trí gốc)" />
-            <LineInput
-              value={inputs.newText}
-              onChange={(v) => set('newText', v)}
-              placeholder="VD: KOZMOZ RACING"
-            />
+          {/* Ô 2 — Text (mới + text gốc cần thay) */}
+          <div className="flex flex-col gap-2">
+            <FieldHead index={2} title="Text" desc="Thay phần chữ trong design (giữ font/vị trí gốc)" />
+            <div className="flex flex-col gap-1">
+              <SectionLabel>Text mới</SectionLabel>
+              <LineInput
+                value={inputs.newText}
+                onChange={(v) => set('newText', v)}
+                placeholder="VD: KOZMOZ RACING"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <SectionLabel>Text gốc cần thay (tùy chọn)</SectionLabel>
+              <LineInput
+                value={inputs.origText}
+                onChange={(v) => set('origText', v)}
+                placeholder="VD: chữ hiện có 'TEAM 99' — báo AI thay đúng chỗ"
+              />
+            </div>
           </div>
 
           {/* Ô 3 — Số mới */}
@@ -309,6 +324,24 @@ export default function App() {
             onRemove={() => clearSlot('replaceImage')}
             onZoom={setZoomImage}
           />
+
+          {/* Mô tả phần cần thay — giúp AI nhận diện đúng nhân vật/số khi nhận nhầm */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2 px-1">
+              <span className="material-symbols-outlined text-[18px] text-white/40">person_search</span>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-semibold text-white leading-tight">Mô tả phần cần thay</span>
+                <span className="text-[10px] text-white/40 leading-tight">Tả nhân vật/số cần thay — giúp AI nhận diện đúng (tùy chọn)</span>
+              </div>
+            </div>
+            <textarea
+              value={inputs.targetDesc}
+              onChange={(e) => set('targetDesc', e.target.value)}
+              placeholder="VD: thay người mẫu nam ở giữa / thay số áo góc phải trên"
+              style={{ height: '64px' }}
+              className="border border-[#595959] hover:border-[#7a7a7a] focus:border-[#969696] rounded-xl w-full px-3 py-2.5 resize-none bg-transparent text-[11px] font-medium text-white placeholder-[rgba(218,220,224,0.3)] tracking-[0.1px] focus:outline-none transition-colors dark-scrollbar"
+            />
+          </div>
 
           {/* Ô 5 — Bảng màu (RGB) */}
           <div className="flex flex-col gap-1.5">

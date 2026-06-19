@@ -11,8 +11,10 @@ export function hexToRgb(hex: string): string {
 
 export interface ChangeSpec {
   newText: string;              // ô2 (đã trim)
+  origText: string;             // ô2b — text gốc cần thay (locator, đã trim)
   newNumber: string;            // ô3 (đã trim)
   hasReplacementImage: boolean; // ô4 có ảnh hay không
+  targetDesc: string;           // mô tả nhân vật/số cần thay (locator, đã trim)
   textColor: string | null;    // ô5 hex hoặc null (giữ màu gốc)
   numberColor: string | null;  // ô5 hex hoặc null (giữ màu gốc)
 }
@@ -34,7 +36,10 @@ REFERENCE IMAGES (in this EXACT order):
 
   const changes: string[] = [];
   if (spec.newText) {
-    changes.push(`- TEXT: replace the wording of the text in the design with: "${spec.newText}". Keep the EXACT same font, size, weight, style, letter-spacing, effects, position and alignment as the original text. ONLY the wording changes.`);
+    const findPart = spec.origText
+      ? `find the existing text that reads "${spec.origText}" and replace ONLY that text with: "${spec.newText}"`
+      : `replace the wording of the text in the design with: "${spec.newText}"`;
+    changes.push(`- TEXT: ${findPart}. Keep the EXACT same font, size, weight, style, letter-spacing, effects, position and alignment as the original text. ONLY the wording changes.`);
   }
   if (spec.newNumber) {
     changes.push(`- NUMBER: replace the number shown in the design with: "${spec.newNumber}". Keep the exact same font, size, style, effects and position as the original number. ONLY the digits change.`);
@@ -43,6 +48,11 @@ REFERENCE IMAGES (in this EXACT order):
     changes.push(`- IMAGE: replace the existing photo/image element with IMAGE 2, matching the original element's exact placement, size, crop and styling.`);
   }
   const changeBlock = `\n\nCHANGES TO APPLY (change ONLY these — nothing else):\n${changes.join('\n')}`;
+
+  // Gợi ý nhận diện đúng phần cần thay (phòng khi AI nhận nhầm element).
+  const targetBlock = spec.targetDesc
+    ? `\n\nTARGET TO REPLACE (use this to locate the EXACT element if it is ambiguous): "${spec.targetDesc}". Apply the image/number change above specifically to this element and do NOT touch other similar-looking elements.`
+    : '';
 
   const colorLines: string[] = [];
   if (spec.textColor) colorLines.push(`- Render the TEXT in this exact color: ${spec.textColor} (RGB ${hexToRgb(spec.textColor)}).`);
@@ -59,5 +69,5 @@ REFERENCE IMAGES (in this EXACT order):
 
   const variantHint = `\n\nThis is rendering OPTION #${variant + 1} of ${NUM_OPTIONS}. Produce a clean, faithful result; you may vary only minor rendering details of the swapped elements (anti-aliasing, exact kerning, blend) — every rule above still applies identically.`;
 
-  return base + changeBlock + colorBlock + rules + variantHint;
+  return base + changeBlock + targetBlock + colorBlock + rules + variantHint;
 }
