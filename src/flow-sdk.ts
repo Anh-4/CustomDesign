@@ -402,7 +402,7 @@ async function refToDataUri(mediaId: string, flatten: boolean): Promise<string |
  * trong ngưỡng `tolerance` VÀ nối liền với mép -> đặt alpha = 0. Chỉ bỏ nền bao quanh, KHÔNG đụng
  * các vùng cùng màu nằm bên trong design. Trả base64 của ảnh PNG (có alpha).
  */
-export async function cutoutBackgroundToPng(base64: string, mimeType: string, tLow = 26, tHigh = 85): Promise<string> {
+export async function cutoutBackgroundToPng(base64: string, mimeType: string, tol = 55, feather = 1): Promise<string> {
   const img = await loadImage(`data:${mimeType};base64,${base64}`);
   const w = img.naturalWidth, h = img.naturalHeight;
   const canvas = document.createElement('canvas');
@@ -413,6 +413,8 @@ export async function cutoutBackgroundToPng(base64: string, mimeType: string, tL
 
   const imgData = ctx.getImageData(0, 0, w, h);
   const d = imgData.data;
+  const N = w * h;
+  const clamp = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v);
 
   // Màu nền = trung bình 4 góc.
   const corners = [0, (w - 1) * 4, (h - 1) * w * 4, ((h - 1) * w + (w - 1)) * 4];
@@ -420,41 +422,57 @@ export async function cutoutBackgroundToPng(base64: string, mimeType: string, tL
   for (const c of corners) { br += d[c]; bg += d[c + 1]; bb += d[c + 2]; }
   br /= 4; bg /= 4; bb /= 4;
 
-  const clamp = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v);
-  const distAt = (o: number) => {
-    const dr = d[o] - br, dg = d[o + 1] - bg, db = d[o + 2] - bb;
-    return Math.sqrt(dr * dr + dg * dg + db * db);
-  };
-
-  const visited = new Uint8Array(w * h);
+  // 1) Flood-fill nhị phân từ mép: pixel nối với mép & gần màu nền -> alpha 0 (nền), còn lại 1.
+  const tol2 = tol * tol;
+  const alpha = new Float32Array(N).fill(1);
+  const visited = new Uint8Array(N);
   const stack: number[] = [];
   for (let x = 0; x < w; x++) { stack.push(x); stack.push((h - 1) * w + x); }
   for (let y = 0; y < h; y++) { stack.push(y * w); stack.push(y * w + (w - 1)); }
-
-  // Flood-fill từ mép. dist >= tHigh -> chạm design, dừng (giữ nguyên).
-  // dist <= tLow -> nền, trong suốt hẳn. Giữa -> alpha mềm (chống răng cưa) + khử viền nền.
   while (stack.length) {
     const p = stack.pop()!;
     if (visited[p]) continue;
     visited[p] = 1;
     const o = p * 4;
-    const dist = distAt(o);
-    if (dist >= tHigh) continue;
-
-    const a = dist <= tLow ? 0 : (dist - tLow) / (tHigh - tLow); // 0..1
-    if (a > 0 && a < 1) {
-      // De-fringe: tách màu nền khỏi pixel biên (C = F*a + bg*(1-a) -> F) để hết viền trắng.
-      d[o] = clamp((d[o] - br * (1 - a)) / a);
-      d[o + 1] = clamp((d[o + 1] - bg * (1 - a)) / a);
-      d[o + 2] = clamp((d[o + 2] - bb * (1 - a)) / a);
-    }
-    d[o + 3] = Math.round(a * 255);
-
+    const dr = d[o] - br, dg = d[o + 1] - bg, db = d[o + 2] - bb;
+    if (dr * dr + dg * dg + db * db > tol2) continue; // chạm design -> dừng
+    alpha[p] = 0;
     const x = p % w, y = (p - x) / w;
     if (x > 0) stack.push(p - 1);
     if (x < w - 1) stack.push(p + 1);
     if (y > 0) stack.push(p - w);
     if (y < h - 1) stack.push(p + w);
+  }
+
+  // 2) Feather: box-blur alpha quanh biên -> chuyển mượt (chống răng cưa).
+  if (feather > 0) {
+    const tmp = new Float32Array(N);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let s = 0, c = 0;
+        for (let dy = -feather; dy <= feather; dy++) {
+          const yy = y + dy; if (yy < 0 || yy >= h) continue;
+          for (let dx = -feather; dx <= feather; dx++) {
+            const xx = x + dx; if (xx < 0 || xx >= w) continue;
+            s += alpha[yy * w + xx]; c++;
+          }
+        }
+        tmp[y * w + x] = s / c;
+      }
+    }
+    alpha.set(tmp);
+  }
+
+  // 3) Áp alpha + khử viền nền (de-fringe) cho pixel biên (0<a<1).
+  for (let p = 0; p < N; p++) {
+    const a = alpha[p];
+    const o = p * 4;
+    if (a >= 1) continue;
+    if (a <= 0) { d[o + 3] = 0; continue; }
+    d[o] = clamp((d[o] - br * (1 - a)) / a);
+    d[o + 1] = clamp((d[o + 1] - bg * (1 - a)) / a);
+    d[o + 2] = clamp((d[o + 2] - bb * (1 - a)) / a);
+    d[o + 3] = Math.round(a * 255);
   }
 
   ctx.putImageData(imgData, 0, 0);

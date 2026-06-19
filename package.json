@@ -1,7 +1,7 @@
 {
   "name": "custom-design",
   "private": true,
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Custom Design - chỉnh text/số/ảnh trong một design PNG hoàn chỉnh bằng AI mà vẫn giữ nguyên style/filter/hiệu ứng gốc, cho Kozmoz Studio",
   "author": "Kozmoz Studio",
   "main": "electron/main.cjs",
