@@ -465,7 +465,7 @@ export default function App() {
                   : orError
                   ? `Không tải được list, dùng mặc định (${orError})`
                   : orModels
-                  ? `${orModels.length} model ảnh khả dụng từ key của bạn`
+                  ? `${orModels.length} model khả dụng từ key (Grok ⚠️ chỉ xuất text — dùng tab "Tạo mới" để Grok tạo ảnh)`
                   : 'Nhập key OpenRouter để tải toàn bộ model khả dụng'}
               </span>
               <button

@@ -75,11 +75,12 @@ export async function fetchOpenRouterImageModels(key?: string): Promise<ImageMod
 
   const data = await res.json();
   const list: any[] = data?.data ?? [];
+
+  const isImageOut = (m: any) =>
+    Array.isArray(m?.architecture?.output_modalities) && m.architecture.output_modalities.includes('image');
+
   const imageModels = list
-    .filter((m) => {
-      const out = m?.architecture?.output_modalities;
-      return Array.isArray(out) && out.includes('image');
-    })
+    .filter(isImageOut)
     .map((m) => ({ id: String(m.id), label: String(m.name || m.id) }));
 
   // Ưu tiên các model có 'image' trong id (gemini image/nano banana, gpt image...) lên đầu, còn lại A→Z.
@@ -88,7 +89,15 @@ export async function fetchOpenRouterImageModels(key?: string): Promise<ImageMod
     const pb = /image|banana/i.test(b.id) ? 0 : 1;
     return pa !== pb ? pa - pb : a.label.localeCompare(b.label);
   });
-  return imageModels;
+
+  // Model Grok/xAI: hiển thị theo yêu cầu, nhưng trên OpenRouter chúng CHỈ xuất text (không tạo/sửa
+  // ảnh) -> gắn nhãn rõ để tránh nhầm. Muốn Grok tạo ảnh thật thì dùng chế độ "Tạo mới" (key xAI).
+  const grokModels = list
+    .filter((m) => /grok|x-ai|xai/i.test(String(m.id)) && !isImageOut(m))
+    .map((m) => ({ id: String(m.id), label: `${String(m.name || m.id)} ⚠️ chỉ xuất text` }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  return [...imageModels, ...grokModels];
 }
 const geminiUrl = (model: string, key: string): string =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
