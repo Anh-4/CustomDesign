@@ -3,7 +3,7 @@ import { Flow, MODELS_BY_PROVIDER, CUSTOM_MODEL_ID, Provider, DEFAULT_PROVIDER, 
 import { Dropdown, LineInput, SectionLabel, ColorField, ZoomModal } from './components/Primitives';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { InputState, GeneratedResult, MediaItem } from './types';
-import { NUM_OPTIONS, buildCustomPrompt, buildCreatePrompt } from './constants';
+import { NUM_OPTIONS, buildCustomPrompt } from './constants';
 
 // Version hiển thị: dùng define lúc build; fallback an toàn khi dev.
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0';
@@ -151,14 +151,6 @@ export default function App() {
   const [model, setModel] = useState<string>(MODELS_BY_PROVIDER[provider][0].id);
   const [customModel, setCustomModel] = useState('');
 
-  // Chế độ: 'edit' = sửa design gốc (OpenRouter/Gemini) · 'create' = tạo ảnh mới từ mô tả (xAI Grok).
-  const [mode, setMode] = useState<'edit' | 'create'>('edit');
-  const [createPrompt, setCreatePrompt] = useState('');
-  const [createModel, setCreateModel] = useState<string>(MODELS_BY_PROVIDER.xai[0].id);
-
-  // Provider hiển thị/dùng cho popup key & footer, theo chế độ hiện tại.
-  const modalProvider: Provider = mode === 'create' ? 'xai' : provider;
-
   // Danh sách model OpenRouter tải động từ key (lọc model xuất ảnh được). null = dùng list cứng.
   const [orModels, setOrModels] = useState<ImageModel[] | null>(null);
   const [orLoading, setOrLoading] = useState(false);
@@ -207,25 +199,12 @@ export default function App() {
   const saveApiKey = (p: Provider, key: string) => {
     try {
       localStorage.setItem(getProviderInfo(p).storageKey, key);
-      // Đang ở tab "Tạo mới" mà nhập key xAI thì chỉ lưu key, không đổi provider của tab Edit.
-      if (!(p === 'xai' && mode === 'create')) {
-        localStorage.setItem('AI_PROVIDER', p);
-        setProvider(p);
-      }
+      localStorage.setItem('AI_PROVIDER', p);
+      setProvider(p);
     } catch {}
     setApiKeyModalOpen(false);
     // Vừa nhập key OpenRouter -> tải lại danh sách model key này gọi được.
     if (p === 'openrouter') loadOrModels();
-  };
-
-  // Đổi chế độ; sang 'create' mà chưa có key xAI thì mở popup nhập key.
-  const switchMode = (m: 'edit' | 'create') => {
-    setMode(m);
-    setError(null);
-    if (m === 'create') {
-      const hasXai = ((import.meta as any).env?.VITE_XAI_API_KEY) || readKeyFor('xai');
-      if (!hasXai) setApiKeyModalOpen(true);
-    }
   };
 
   // Chọn ảnh cho ô design (1) hoặc ô ảnh thay thế (4).
@@ -244,7 +223,7 @@ export default function App() {
 
   const loading = loadingIndices.size > 0;
   const hasChange = !!(inputs.newText.trim() || inputs.newNumber.trim() || inputs.replaceImage);
-  const canGenerate = (mode === 'edit' ? (!!inputs.designImage && hasChange) : !!createPrompt.trim()) && !loading;
+  const canGenerate = !!inputs.designImage && hasChange && !loading;
   const hasOutput = loading || results.some(Boolean) || slotErrors.some(Boolean);
 
   /** Chạy 1 mẻ NUM_OPTIONS mẫu SONG SONG (dùng chung cho edit & create). */
@@ -282,8 +261,8 @@ export default function App() {
     }
   };
 
-  // Chế độ EDIT: sửa design gốc (giữ style), gửi ảnh tham chiếu cho OpenRouter/Gemini.
-  const generateEdit = () => {
+  // Sửa design gốc (giữ style), gửi ảnh tham chiếu cho provider đã chọn.
+  const generate = () => {
     const design = inputs.designImage;
     if (!design) { setError('Cần tải lên design gốc ở ô 1.'); return; }
     if (!hasChange) { setError('Hãy nhập text (ô 2), số (ô 3) hoặc tải ảnh thay thế (ô 4) — ít nhất một thứ để thay đổi.'); return; }
@@ -304,19 +283,6 @@ export default function App() {
     };
     runBatch(provider, effectiveModel, (i) => buildCustomPrompt(spec, i), refs);
   };
-
-  // Chế độ CREATE: tạo ảnh mới từ mô tả qua xAI Grok (không dùng ảnh tham chiếu).
-  const generateCreate = () => {
-    const desc = createPrompt.trim();
-    if (!desc) { setError('Hãy nhập mô tả ảnh cần tạo.'); return; }
-    const hasXai = ((import.meta as any).env?.VITE_XAI_API_KEY) || readKeyFor('xai');
-    if (!hasXai) { setApiKeyModalOpen(true); setError('Chưa có key xAI Grok — hãy nhập key để tạo ảnh.'); return; }
-    const effectiveModel = createModel === CUSTOM_MODEL_ID ? customModel.trim() : createModel;
-    if (!effectiveModel) { setError('Hãy nhập Model ID khi chọn "Khác".'); return; }
-    runBatch('xai', effectiveModel, (i) => buildCreatePrompt(desc, i));
-  };
-
-  const generate = () => (mode === 'create' ? generateCreate() : generateEdit());
 
   const download = (r: GeneratedResult) => {
     const ext = (r.mimeType.split('/')[1] || 'png').replace('jpeg', 'jpg');
@@ -342,27 +308,7 @@ export default function App() {
           <span className="text-[10px] text-white/30">v{APP_VERSION}</span>
         </header>
 
-        {/* Chuyển chế độ: Sửa design (edit) | Tạo mới (Grok) */}
-        <div className="px-4 pt-3">
-          <div className="flex w-full items-center border border-[#595959] rounded-xl overflow-hidden bg-transparent">
-            <button
-              onClick={() => switchMode('edit')}
-              className={`flex-1 flex items-center justify-center gap-1.5 h-[36px] text-[11px] font-medium transition-all ${mode === 'edit' ? 'bg-[#969696] text-black' : 'text-white/65 hover:text-white hover:bg-white/5'}`}
-            >
-              <span className="material-symbols-outlined text-[16px]">edit</span> Sửa design
-            </button>
-            <button
-              onClick={() => switchMode('create')}
-              className={`flex-1 flex items-center justify-center gap-1.5 h-[36px] text-[11px] font-medium transition-all ${mode === 'create' ? 'bg-[#969696] text-black' : 'text-white/65 hover:text-white hover:bg-white/5'}`}
-            >
-              <span className="material-symbols-outlined text-[16px]">auto_awesome</span> Tạo mới (Grok)
-            </button>
-          </div>
-        </div>
-
         <div className="flex-1 overflow-y-auto dark-scrollbar p-4 flex flex-col gap-4">
-          {mode === 'edit' && (
-          <>
           {/* Ô 1 — Design gốc */}
           <UploadBox
             index={1}
@@ -487,47 +433,6 @@ export default function App() {
               className="border border-[#595959] focus:border-[#969696] rounded-xl w-full px-3 py-2.5 bg-transparent text-[11px] text-white placeholder-white/25 focus:outline-none transition-colors"
             />
           )}
-          </>
-          )}
-
-          {mode === 'create' && (
-          <>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-2 px-1">
-                <span className="material-symbols-outlined text-[18px] text-amber-400">auto_awesome</span>
-                <div className="flex flex-col">
-                  <span className="text-[12px] font-semibold text-white leading-tight">Mô tả ảnh cần tạo</span>
-                  <span className="text-[10px] text-white/40 leading-tight">Tạo ảnh mới từ đầu bằng Grok — không dùng/giữ design gốc</span>
-                </div>
-              </div>
-              <textarea
-                value={createPrompt}
-                onChange={(e) => setCreatePrompt(e.target.value)}
-                placeholder="VD: Áo thun đen in logo đội đua F1 Ferrari phong cách vintage, nền trắng, chất lượng in cao"
-                style={{ height: '150px' }}
-                className="border border-[#595959] hover:border-[#7a7a7a] focus:border-[#969696] rounded-xl w-full px-3 py-2.5 resize-none bg-transparent text-[12px] font-medium text-white placeholder-[rgba(218,220,224,0.3)] tracking-[0.1px] focus:outline-none transition-colors dark-scrollbar"
-              />
-            </div>
-
-            <Dropdown
-              label="Model xAI"
-              value={createModel}
-              items={[...MODELS_BY_PROVIDER.xai.map((m) => ({ value: m.id, label: m.label })), { value: CUSTOM_MODEL_ID, label: 'Khác (nhập model ID)…' }]}
-              onChange={setCreateModel}
-            />
-            {createModel === CUSTOM_MODEL_ID && (
-              <input
-                value={customModel}
-                onChange={(e) => setCustomModel(e.target.value)}
-                placeholder="VD: grok-2-image-1212"
-                className="border border-[#595959] focus:border-[#969696] rounded-xl w-full px-3 py-2.5 bg-transparent text-[11px] text-white placeholder-white/25 focus:outline-none transition-colors"
-              />
-            )}
-            <div className="text-[10px] text-white/35 bg-white/5 border border-white/10 rounded-xl px-3 py-2 leading-relaxed">
-              💡 Grok tạo ảnh mới từ mô tả, thoáng hơn về logo/nhân vật/trademark — nhưng <span className="text-white/55">không giữ design gốc</span>. Muốn sửa design có sẵn thì dùng tab <span className="text-white/55">Sửa design</span>.
-            </div>
-          </>
-          )}
 
           {error && (
             <div className="text-[11px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 leading-relaxed">
@@ -543,13 +448,13 @@ export default function App() {
             className="flex items-center justify-center gap-2 h-[42px] rounded-xl bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-black text-[13px] font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <span className="material-symbols-outlined text-[18px]">{loading ? 'progress_activity' : 'auto_awesome'}</span>
-            {loading ? `Đang tạo ${NUM_OPTIONS} mẫu…` : mode === 'create' ? `Tạo ${NUM_OPTIONS} ảnh mới` : `Tạo ${NUM_OPTIONS} mẫu Custom`}
+            {loading ? `Đang tạo ${NUM_OPTIONS} mẫu…` : `Tạo ${NUM_OPTIONS} mẫu Custom`}
           </button>
           <button
             onClick={() => setApiKeyModalOpen(true)}
             className="text-[10px] text-white/40 hover:text-white/70 transition-colors"
           >
-            Provider: <span className="text-white/60">{getProviderInfo(modalProvider).label}</span> · Đổi API Key
+            Provider: <span className="text-white/60">{getProviderInfo(provider).label}</span> · Đổi API Key
           </button>
         </div>
       </aside>
@@ -578,13 +483,9 @@ export default function App() {
         ) : (
           <div className="flex-1 flex items-center justify-center p-6">
             <div className="flex flex-col items-center gap-3 text-white/25 max-w-[360px] text-center">
-              <span className="material-symbols-outlined text-[44px]">{mode === 'create' ? 'auto_awesome' : 'edit_note'}</span>
+              <span className="material-symbols-outlined text-[44px]">edit_note</span>
               <span className="text-[13px] leading-relaxed">
-                {mode === 'create' ? (
-                  <>Nhập <span className="text-white/50">mô tả ảnh</span> cần tạo rồi bấm tạo — Grok sẽ dựng {NUM_OPTIONS} ảnh mới để Anh4 chọn (không dùng design gốc).</>
-                ) : (
-                  <>Tải <span className="text-white/50">design gốc (ô 1)</span>, rồi nhập text/số hoặc tải ảnh thay thế (ô 2–4). AI giữ nguyên style gốc, chỉ thay phần Anh4 chỉ định và tạo {NUM_OPTIONS} mẫu để chọn.</>
-                )}
+                Tải <span className="text-white/50">design gốc (ô 1)</span>, rồi nhập text/số hoặc tải ảnh thay thế (ô 2–4). AI giữ nguyên style gốc, chỉ thay phần Anh4 chỉ định và tạo {NUM_OPTIONS} mẫu để chọn.
               </span>
             </div>
           </div>
@@ -593,8 +494,8 @@ export default function App() {
 
       <ApiKeyModal
         isOpen={apiKeyModalOpen}
-        required={mode === 'edit' && !readKeyFor(provider) && !(import.meta as any).env?.[getProviderInfo(provider).envKey]}
-        provider={modalProvider}
+        required={!readKeyFor(provider) && !(import.meta as any).env?.[getProviderInfo(provider).envKey]}
+        provider={provider}
         getKeyFor={readKeyFor}
         onSave={saveApiKey}
         onClose={() => setApiKeyModalOpen(false)}

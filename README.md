@@ -18,12 +18,14 @@ Cùng stack với `design-transfer` / `apparel-video`: Vite + React + TS + Tailw
 
 **Output:** 2 mẫu ảnh PNG để chọn — bấm vào ảnh để **zoom**, bấm **Tải PNG** để tải bản chất lượng cao (in ấn được).
 
-## Hai chế độ
+## Provider & model
 
-- **Sửa design** (mặc định): edit text/số/ảnh, giữ style gốc. Provider: **OpenRouter / Gemini** (Nano Banana) hoặc **xAI Grok** (`grok-imagine-image-quality` qua `/v1/images/edits`) — chọn ở popup "Đổi API Key". Dropdown model OpenRouter tải động theo key, lọc model xuất ảnh được.
-- **Tạo mới (Grok)**: tạo ảnh **mới từ mô tả** bằng **xAI Grok** (`/v1/images/generations`, key tại https://console.x.ai). Thoáng hơn về logo/nhân vật/trademark, **không dùng design gốc** (text→image).
+Chọn ở popup **"Đổi API Key"**:
+- **OpenRouter** — dropdown model tải động theo key (lọc model xuất ảnh được), gồm Nano Banana, GPT Image và **Grok Imagine** (`x-ai/grok-imagine-image-quality`, sửa ảnh được).
+- **Google Gemini** — Nano Banana (gọi trực tiếp).
+- **xAI Grok** — `grok-imagine-image-quality` qua `/v1/images/edits` (cần key https://console.x.ai).
 
-> Lưu ý: model `x-ai/grok-*` trên **OpenRouter** chỉ xuất text (không sửa ảnh). Grok sửa/tạo ảnh phải dùng **provider xAI trực tiếp** (key console.x.ai).
+> Lưu ý: model `x-ai/grok-4.x` trên OpenRouter chỉ xuất text (không sửa ảnh) nên không liệt kê. Grok sửa ảnh = `grok-imagine-image-quality`.
 
 ## Chạy nhanh (trình duyệt)
 

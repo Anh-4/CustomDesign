@@ -73,17 +73,3 @@ REFERENCE IMAGES (in this EXACT order):
 
   return base + changeBlock + targetBlock + colorBlock + rules + variantHint;
 }
-
-/**
- * Prompt cho chế độ TẠO MỚI (text->image, xAI Grok): bọc mô tả của Anh4 với định hướng
- * chất lượng cao, sẵn sàng in ấn, và nudge đa dạng giữa các mẫu.
- */
-export function buildCreatePrompt(desc: string, variant: number): string {
-  const variants = [
-    '',
-    ' Use a different composition, angle and color accents from other variations.',
-    ' Use an alternative layout and framing from other variations.',
-  ];
-  const v = variants[variant] || '';
-  return `${desc.trim()}. High-quality, sharp, detailed, clean print-ready artwork suitable for print-on-demand products.${v}`;
-}
