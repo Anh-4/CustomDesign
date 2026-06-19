@@ -28,7 +28,7 @@ export function buildCustomPrompt(spec: ChangeSpec, variant: number): string {
   const base = `You are a precise design editor. Treat this strictly as an IN-PLACE EDIT (like replacing text on a layer in Photoshop) — you are NOT redrawing, re-illustrating or regenerating the artwork. Change ONLY the specific elements requested below; keep every other pixel byte-for-byte identical to the original.
 
 REFERENCE IMAGES (in this EXACT order):
-- IMAGE 1 — THE ORIGINAL DESIGN: a complete, finished design. This is the canvas you must edit. You MUST preserve its exact layout, composition, art style, color grading, filters, textures, lighting, shadows, effects, typography/font style, and EVERY graphic element (every character, illustration and letter fill) — except the specific elements listed under CHANGES below. If IMAGE 1 has a transparent or empty background, the output background MUST stay transparent/empty — never add any background, color block, banner, box or scenery.${
+- IMAGE 1 — THE ORIGINAL DESIGN: a complete, finished design. This is the canvas you must edit. You MUST preserve its exact layout, composition, art style, color grading, filters, textures, lighting, shadows, effects, typography/font style, and EVERY graphic element (every character, illustration and letter fill) — except the specific elements listed under CHANGES below. Keep the background plain and empty EXACTLY as in IMAGE 1 — never add any colored block, banner, rectangle, panel, gradient or scenery to it; an area that is empty in IMAGE 1 stays empty.${
     spec.hasReplacementImage
       ? `\n- IMAGE 2 — REPLACEMENT IMAGE: a new picture to place INTO the design, replacing the existing photo/image element. Fit it into the SAME position, size, framing, crop, masking and styling as the image element it replaces, so it blends seamlessly and looks native to the original design.`
       : ''
@@ -39,7 +39,7 @@ REFERENCE IMAGES (in this EXACT order):
     const findPart = spec.origText
       ? `find the existing text that reads "${spec.origText}" and replace ONLY that text with: "${spec.newText}"`
       : `replace the wording of the text in the design with: "${spec.newText}"`;
-    changes.push(`- TEXT: ${findPart}. Reproduce the new text EXACTLY and VERBATIM, character-for-character — keep the exact spelling, capitalization, spacing, punctuation, symbols and accent marks/diacritics as written. Do NOT translate, correct, rephrase, abbreviate, reorder, add or drop ANY character. Keep the EXACT same font, size, weight, style, letter-spacing, color, effects, position and alignment as the original text — only the wording is swapped.`);
+    changes.push(`- TEXT: ${findPart}. Reproduce the new text EXACTLY and VERBATIM, character-for-character — keep the exact spelling, capitalization, spacing, punctuation, symbols and accent marks/diacritics as written. Do NOT translate, correct, rephrase, abbreviate, reorder, add or drop ANY character. Keep the EXACT same font, size, weight, style, letter-spacing, color, the exact fill/pattern/texture and colors inside each letter, effects, position and alignment as the original text — only the wording is swapped.`);
   }
   if (spec.newNumber) {
     changes.push(`- NUMBER: replace the number shown in the design with: "${spec.newNumber}". Keep the exact same font, size, style, effects and position as the original number. ONLY the digits change.`);
@@ -64,7 +64,7 @@ REFERENCE IMAGES (in this EXACT order):
   const rules = `\n\nSTRICT RULES:
 - IDENTICAL OUTPUT (most important): the output MUST be the EXACT original design from IMAGE 1, completely unchanged, EXCEPT only the specific text/number/image elements listed under CHANGES. Reproduce every other pixel, element, color, position, spacing, proportion and the background EXACTLY as in IMAGE 1.
 - DO NOT ADD anything new: no extra graphics, characters, mascots, shapes, icons, decorations, patterns, stars, sparkles, shadows, highlights, gradients, borders, frames, textures, watermarks or background elements that are not already in IMAGE 1.
-- BACKGROUND: keep the original background EXACTLY. If IMAGE 1 has no background (transparent/empty), the result MUST also be transparent/empty — do NOT add any colored background, banner, rectangle, box or scene behind the design.
+- BACKGROUND: keep the background plain and empty EXACTLY as IMAGE 1 — do NOT add ANY colored background, block, banner, rectangle, panel, gradient or scene behind or around the design. An area empty in IMAGE 1 MUST stay empty.
 - DO NOT REMOVE or omit any existing element of IMAGE 1.
 - DO NOT redraw, re-illustrate, restyle, recolor, move, resize, "improve", clean up or reinterpret the artwork; keep the exact same line weight, coloring, art style and layout.
 - TEXT FIDELITY (critical): any replacement text MUST appear in the output EXACTLY as the user typed it — character-for-character, including identical spelling, letter case, spaces, punctuation, special symbols and accent marks/diacritics. Do not "fix", localize, translate or beautify the text. If you cannot render a character faithfully, render it as-is rather than substituting it.

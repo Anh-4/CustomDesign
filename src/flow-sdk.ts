@@ -181,9 +181,11 @@ async function generateWithOpenRouter(opts: GenOpts, key: string): Promise<Media
   // Model chỉ xuất 'image' (Grok, FLUX) -> chỉ yêu cầu ['image']; nếu kèm 'text' sẽ lỗi modalities.
   const imageOnlyOut = isGrok || /flux/i.test(opts.model);
   const content: any[] = [{ type: 'text', text: opts.prompt }];
-  for (const id of opts.referenceImageMediaIds ?? []) {
-    const m = registry.get(id);
-    if (m) content.push({ type: 'image_url', image_url: { url: `data:${m.mimeType};base64,${m.base64}` } });
+  const refIds = opts.referenceImageMediaIds ?? [];
+  for (let i = 0; i < refIds.length; i++) {
+    // Ref đầu = ảnh design gốc -> flatten nền trắng để model khỏi "điền" vùng trong suốt.
+    const uri = await refToDataUri(refIds[i], i === 0);
+    if (uri) content.push({ type: 'image_url', image_url: { url: uri } });
   }
 
   const res = await fetch(OPENROUTER_URL, {
@@ -308,11 +310,12 @@ async function generateWithXAI(opts: GenOpts, key: string): Promise<MediaResult>
   let body: any;
   if (refIds.length > 0) {
     // EDIT: gửi ảnh dạng { url: data-URI, type: 'image_url' } (1 ảnh -> object, nhiều -> mảng, tối đa 3).
-    const images = refIds
-      .slice(0, 3)
-      .map((id) => registry.get(id))
-      .filter((m): m is { base64: string; mimeType: string } => !!m)
-      .map((m) => ({ url: `data:${m.mimeType};base64,${m.base64}`, type: 'image_url' }));
+    const slice = refIds.slice(0, 3);
+    const images: any[] = [];
+    for (let i = 0; i < slice.length; i++) {
+      const uri = await refToDataUri(slice[i], i === 0); // flatten ảnh design gốc lên nền trắng
+      if (uri) images.push({ url: uri, type: 'image_url' });
+    }
     url = XAI_EDIT_URL;
     body = { model, prompt: opts.prompt, image: images.length === 1 ? images[0] : images, response_format: 'b64_json' };
   } else {
@@ -361,6 +364,37 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error('Lỗi tải ảnh để xử lý nền'));
     img.src = src;
   });
+}
+
+/**
+ * Dán ảnh lên nền TRẮNG (xoá vùng trong suốt). Lý do: model edit hay coi vùng PNG trong suốt
+ * là "vùng cần điền" -> tự vẽ thêm khối màu/nền. Nền trắng đặc giúp nó giữ design, không bịa thêm.
+ * Lúc tải về sẽ xoá nền trắng -> PNG trong suốt (cutoutBackgroundToPng).
+ */
+async function flattenToWhite(base64: string, mimeType: string): Promise<{ base64: string; mimeType: string }> {
+  const img = await loadImage(`data:${mimeType};base64,${base64}`);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return { base64, mimeType };
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0);
+  return { base64: canvas.toDataURL('image/png').split(',')[1] || base64, mimeType: 'image/png' };
+}
+
+/** Lấy data-URI của 1 ảnh tham chiếu; flatten nền trắng nếu yêu cầu (dùng cho ảnh design gốc). */
+async function refToDataUri(mediaId: string, flatten: boolean): Promise<string | null> {
+  const m = registry.get(mediaId);
+  if (!m) return null;
+  if (!flatten) return `data:${m.mimeType};base64,${m.base64}`;
+  try {
+    const f = await flattenToWhite(m.base64, m.mimeType);
+    return `data:${f.mimeType};base64,${f.base64}`;
+  } catch {
+    return `data:${m.mimeType};base64,${m.base64}`;
+  }
 }
 
 /**
