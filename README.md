@@ -20,8 +20,10 @@ Cùng stack với `design-transfer` / `apparel-video`: Vite + React + TS + Tailw
 
 ## Hai chế độ
 
-- **Sửa design** (mặc định): flow ở trên — edit text/số/ảnh, giữ style gốc (OpenRouter/Gemini, Nano Banana). Dropdown model OpenRouter tải động theo key, lọc các model xuất ảnh được.
-- **Tạo mới (Grok)**: tạo ảnh **mới từ mô tả** bằng **xAI Grok** (`grok-2-image`, key tại https://console.x.ai). Thoáng hơn về logo/nhân vật/trademark, nhưng **không giữ design gốc** (text→image, không nhận ảnh tham chiếu).
+- **Sửa design** (mặc định): edit text/số/ảnh, giữ style gốc. Provider: **OpenRouter / Gemini** (Nano Banana) hoặc **xAI Grok** (`grok-imagine-image-quality` qua `/v1/images/edits`) — chọn ở popup "Đổi API Key". Dropdown model OpenRouter tải động theo key, lọc model xuất ảnh được.
+- **Tạo mới (Grok)**: tạo ảnh **mới từ mô tả** bằng **xAI Grok** (`/v1/images/generations`, key tại https://console.x.ai). Thoáng hơn về logo/nhân vật/trademark, **không dùng design gốc** (text→image).
+
+> Lưu ý: model `x-ai/grok-*` trên **OpenRouter** chỉ xuất text (không sửa ảnh). Grok sửa/tạo ảnh phải dùng **provider xAI trực tiếp** (key console.x.ai).
 
 ## Chạy nhanh (trình duyệt)
 

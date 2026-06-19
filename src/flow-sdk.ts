@@ -13,7 +13,7 @@ export interface ImageModel { id: string; label: string }
 export const CUSTOM_MODEL_ID = '__custom__';
 
 // Nhà cung cấp AI hỗ trợ. Mỗi provider có API key + danh sách model riêng.
-// 'xai' chỉ dùng cho chế độ TẠO MỚI (text->image, Grok) — không edit được design gốc.
+// 'xai' (Grok) làm được CẢ edit (/images/edits) lẫn tạo mới (/images/generations).
 export type Provider = 'openrouter' | 'gemini' | 'xai';
 export interface ProviderInfo {
   id: Provider;
@@ -29,8 +29,8 @@ export const PROVIDERS: ProviderInfo[] = [
 ];
 export const DEFAULT_PROVIDER: Provider = 'openrouter';
 
-// Provider dùng cho chế độ EDIT (nhận ảnh tham chiếu để sửa). xAI Grok không edit được.
-export const EDIT_PROVIDERS: Provider[] = ['openrouter', 'gemini'];
+// Provider dùng cho chế độ EDIT (nhận ảnh tham chiếu để sửa). Cả 3 đều edit được.
+export const EDIT_PROVIDERS: Provider[] = ['openrouter', 'gemini', 'xai'];
 
 export const getProviderInfo = (p: Provider): ProviderInfo =>
   PROVIDERS.find((x) => x.id === p) ?? PROVIDERS[0];
@@ -48,9 +48,9 @@ export const MODELS_BY_PROVIDER: Record<Provider, ImageModel[]> = {
     { id: 'gemini-3-pro-image-preview', label: '🍌 Nano Banana Pro' },
     { id: 'gemini-2.5-flash-image',     label: '🍌 Nano Banana / Flash' },
   ],
-  // xAI Grok — chỉ TẠO ẢNH MỚI từ mô tả (không nhận ảnh tham chiếu để edit).
+  // xAI Grok — edit (/images/edits) + tạo mới (/images/generations).
   xai: [
-    { id: 'grok-2-image-1212', label: 'Grok 2 Image (xAI)' },
+    { id: 'grok-imagine-image-quality', label: 'Grok Imagine (xAI)' },
   ],
 };
 
@@ -106,6 +106,7 @@ export async function fetchOpenRouterImageModels(key?: string): Promise<ImageMod
 const geminiUrl = (model: string, key: string): string =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
 const XAI_IMAGE_URL = 'https://api.x.ai/v1/images/generations';
+const XAI_EDIT_URL = 'https://api.x.ai/v1/images/edits';
 
 type MediaResult = { mediaId: string; base64: string; mimeType: string };
 
@@ -245,20 +246,35 @@ async function generateWithGemini(opts: GenOpts, key: string): Promise<MediaResu
 }
 
 /**
- * Tạo ảnh MỚI từ mô tả qua xAI Grok (api.x.ai /images/generations).
- * Lưu ý: API này KHÔNG nhận ảnh tham chiếu để edit, KHÔNG có tham số tỉ lệ/size
- * -> chỉ dùng cho chế độ "Tạo mới"; referenceImageMediaIds & aspectRatio bị bỏ qua.
+ * Sinh/chỉnh ảnh qua xAI Grok (Grok Imagine).
+ *  - CÓ ảnh tham chiếu -> /v1/images/edits (sửa ảnh, nhận tối đa 3 ảnh base64).
+ *  - KHÔNG có ảnh      -> /v1/images/generations (tạo mới từ text).
+ * API JSON, không có tham số tỉ lệ/size -> aspectRatio bị bỏ qua.
  */
 async function generateWithXAI(opts: GenOpts, key: string): Promise<MediaResult> {
-  const res = await fetch(XAI_IMAGE_URL, {
+  const model = opts.model || 'grok-imagine-image-quality';
+  const refIds = opts.referenceImageMediaIds ?? [];
+
+  let url: string;
+  let body: any;
+  if (refIds.length > 0) {
+    // EDIT: gửi ảnh dạng { url: data-URI, type: 'image_url' } (1 ảnh -> object, nhiều -> mảng, tối đa 3).
+    const images = refIds
+      .slice(0, 3)
+      .map((id) => registry.get(id))
+      .filter((m): m is { base64: string; mimeType: string } => !!m)
+      .map((m) => ({ url: `data:${m.mimeType};base64,${m.base64}`, type: 'image_url' }));
+    url = XAI_EDIT_URL;
+    body = { model, prompt: opts.prompt, image: images.length === 1 ? images[0] : images, response_format: 'b64_json' };
+  } else {
+    url = XAI_IMAGE_URL;
+    body = { model, prompt: opts.prompt, n: 1, response_format: 'b64_json' };
+  }
+
+  const res = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: opts.model || 'grok-2-image-1212',
-      prompt: opts.prompt,
-      n: 1,
-      response_format: 'b64_json',
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

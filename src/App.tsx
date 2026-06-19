@@ -143,7 +143,7 @@ export default function App() {
   const [provider, setProvider] = useState<Provider>(() => {
     try {
       const p = localStorage.getItem('AI_PROVIDER');
-      return p === 'gemini' || p === 'openrouter' ? p : DEFAULT_PROVIDER;
+      return p === 'gemini' || p === 'openrouter' || p === 'xai' ? p : DEFAULT_PROVIDER;
     } catch { return DEFAULT_PROVIDER; }
   });
 
@@ -207,8 +207,8 @@ export default function App() {
   const saveApiKey = (p: Provider, key: string) => {
     try {
       localStorage.setItem(getProviderInfo(p).storageKey, key);
-      // xAI chỉ dùng cho chế độ Tạo mới -> không đổi provider của chế độ Edit.
-      if (p !== 'xai') {
+      // Đang ở tab "Tạo mới" mà nhập key xAI thì chỉ lưu key, không đổi provider của tab Edit.
+      if (!(p === 'xai' && mode === 'create')) {
         localStorage.setItem('AI_PROVIDER', p);
         setProvider(p);
       }
