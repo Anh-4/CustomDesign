@@ -3,7 +3,7 @@ import { Flow, MODELS_BY_PROVIDER, CUSTOM_MODEL_ID, Provider, DEFAULT_PROVIDER, 
 import { Dropdown, LineInput, SectionLabel, ColorField, ZoomModal } from './components/Primitives';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { InputState, GeneratedResult, MediaItem } from './types';
-import { NUM_OPTIONS, buildCustomPrompt } from './constants';
+import { NUM_OPTIONS, buildCustomPrompt, buildCustomPromptConcise } from './constants';
 
 // Version hiển thị: dùng define lúc build; fallback an toàn khi dev.
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0';
@@ -281,7 +281,12 @@ export default function App() {
       textColor: inputs.useTextColor ? inputs.textColor : null,
       numberColor: inputs.useNumberColor ? inputs.numberColor : null,
     };
-    runBatch(provider, effectiveModel, (i) => buildCustomPrompt(spec, i), refs);
+    // Grok hay vẽ lại -> dùng prompt ngắn gọn, dứt khoát; model khác dùng prompt rule đầy đủ.
+    const isGrok = /grok|imagine/i.test(effectiveModel);
+    const makePrompt = isGrok
+      ? (i: number) => buildCustomPromptConcise(spec, i)
+      : (i: number) => buildCustomPrompt(spec, i);
+    runBatch(provider, effectiveModel, makePrompt, refs);
   };
 
   // Tải PNG nền trong suốt: xoá nền (flood-fill từ mép) rồi xuất PNG có alpha.
@@ -302,6 +307,7 @@ export default function App() {
     ...activeList.map((m) => ({ value: m.id, label: m.label })),
     { value: CUSTOM_MODEL_ID, label: 'Khác (nhập model ID)…' },
   ];
+  const isGrokSelected = /grok|imagine/i.test(model === CUSTOM_MODEL_ID ? customModel : model);
 
   return (
     <div className="flex h-screen w-screen bg-[#0e0e0e] text-white overflow-hidden">
@@ -439,6 +445,12 @@ export default function App() {
               placeholder="VD: google/gemini-2.5-flash-image"
               className="border border-[#595959] focus:border-[#969696] rounded-xl w-full px-3 py-2.5 bg-transparent text-[11px] text-white placeholder-white/25 focus:outline-none transition-colors"
             />
+          )}
+
+          {isGrokSelected && (
+            <div className="text-[10px] text-amber-400/70 bg-amber-400/5 border border-amber-400/15 rounded-xl px-3 py-2 leading-relaxed">
+              💡 Grok thoáng bản quyền nhưng hay vẽ thêm. Mẹo: bấm <b>Tạo</b> vài lần lấy mẫu sạch nhất; điền “Text gốc cần thay” + “Mô tả phần cần thay” để neo đúng chỗ.
+            </div>
           )}
 
           {error && (

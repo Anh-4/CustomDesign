@@ -194,7 +194,8 @@ async function generateWithOpenRouter(opts: GenOpts, key: string): Promise<Media
       model: opts.model,
       messages: [{ role: 'user', content }],
       modalities: isGrok ? ['image'] : ['image', 'text'],
-      ...(isGrok ? { temperature: 0 } : {}),
+      // Grok: temperature vừa phải -> 2 mẫu khác nhau (để bấm tạo lại chọn bản sạch), vẫn đủ bám.
+      ...(isGrok ? { temperature: 0.4 } : {}),
       ...(opts.aspectRatio ? { image_config: { aspect_ratio: opts.aspectRatio } } : {}),
     }),
   });

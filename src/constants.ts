@@ -77,3 +77,35 @@ REFERENCE IMAGES (in this EXACT order):
 
   return base + changeBlock + targetBlock + colorBlock + rules + variantHint;
 }
+
+/**
+ * Prompt NGẮN GỌN cho Grok Imagine — model sinh ảnh bám lệnh ngắn/dứt khoát tốt hơn rule dài.
+ * Nhắm thẳng lỗi hay gặp của Grok: tự vẽ thêm khối màu/nền/chi tiết.
+ */
+export function buildCustomPromptConcise(spec: ChangeSpec, _variant: number): string {
+  const changes: string[] = [];
+  if (spec.newText) {
+    changes.push(
+      spec.origText
+        ? `change ONLY the text "${spec.origText}" to "${spec.newText}" (keep its exact font, color, size, position)`
+        : `change ONLY the lettering text to "${spec.newText}" (keep its exact font, color, size, position)`
+    );
+  }
+  if (spec.newNumber) changes.push(`change the number to "${spec.newNumber}" (keep the same style and position)`);
+  if (spec.hasReplacementImage) changes.push(`replace the existing photo with the SECOND reference image, in the same position, size and crop`);
+
+  const colors: string[] = [];
+  if (spec.textColor) colors.push(`text color = ${spec.textColor}`);
+  if (spec.numberColor) colors.push(`number color = ${spec.numberColor}`);
+
+  return [
+    `Edit the reference image IN PLACE — do not regenerate it. ${changes.join('; ')}.`,
+    colors.length ? `Set ${colors.join(', ')}.` : '',
+    spec.targetDesc ? `The element to change is: ${spec.targetDesc}.` : '',
+    `Render the new text EXACTLY character-for-character (same spelling, letter case, spaces, punctuation and accent marks).`,
+    `Keep EVERYTHING else 100% identical: all characters, illustrations, letter fills and colors, sparkles, layout, and the transparent/empty background.`,
+    `Do NOT add, remove, redraw or invent ANYTHING. Absolutely NO new background, color block, banner, rectangle, box or scenery anywhere. Output the SAME design with only the requested change.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
