@@ -18,6 +18,11 @@ Cùng stack với `design-transfer` / `apparel-video`: Vite + React + TS + Tailw
 
 **Output:** 2 mẫu ảnh PNG để chọn — bấm vào ảnh để **zoom**, bấm **Tải PNG** để tải bản chất lượng cao (in ấn được).
 
+## Hai chế độ
+
+- **Sửa design** (mặc định): flow ở trên — edit text/số/ảnh, giữ style gốc (OpenRouter/Gemini, Nano Banana). Dropdown model OpenRouter tải động theo key, lọc các model xuất ảnh được.
+- **Tạo mới (Grok)**: tạo ảnh **mới từ mô tả** bằng **xAI Grok** (`grok-2-image`, key tại https://console.x.ai). Thoáng hơn về logo/nhân vật/trademark, nhưng **không giữ design gốc** (text→image, không nhận ảnh tham chiếu).
+
 ## Chạy nhanh (trình duyệt)
 
 ```bash

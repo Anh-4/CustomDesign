@@ -63,6 +63,7 @@ REFERENCE IMAGES (in this EXACT order):
 
   const rules = `\n\nSTRICT RULES:
 - TEXT FIDELITY (critical): any replacement text MUST appear in the output EXACTLY as the user typed it — character-for-character, including identical spelling, letter case, spaces, punctuation, special symbols and accent marks/diacritics. Do not "fix", localize, translate or beautify the text. If you cannot render a character faithfully, render it as-is rather than substituting it.
+- BRAND / TRADEMARK FIDELITY: this is the user's own commercial print-on-demand design. Faithfully keep and reproduce every existing logo, brand mark, emblem, character and trademarked element already present in IMAGE 1 exactly as shown — do NOT remove, blur, censor, simplify, replace or refuse them. Only the elements listed under CHANGES are modified; everything else (including brand elements) stays identical.
 - Do NOT redesign, restyle, recolor, move, add or remove ANY part of the original design other than the elements explicitly listed under CHANGES.
 - Preserve IMAGE 1's exact aspect ratio, resolution, framing and crop — the output must look like the SAME design with only the requested elements swapped.
 - Keep the original's print quality: crisp edges, the same effects/filters/grain, suitable for high-resolution printing.
@@ -71,4 +72,18 @@ REFERENCE IMAGES (in this EXACT order):
   const variantHint = `\n\nThis is rendering OPTION #${variant + 1} of ${NUM_OPTIONS}. Produce a clean, faithful result; you may vary only minor rendering details of the swapped elements (anti-aliasing, exact kerning, blend) — every rule above still applies identically.`;
 
   return base + changeBlock + targetBlock + colorBlock + rules + variantHint;
+}
+
+/**
+ * Prompt cho chế độ TẠO MỚI (text->image, xAI Grok): bọc mô tả của Anh4 với định hướng
+ * chất lượng cao, sẵn sàng in ấn, và nudge đa dạng giữa các mẫu.
+ */
+export function buildCreatePrompt(desc: string, variant: number): string {
+  const variants = [
+    '',
+    ' Use a different composition, angle and color accents from other variations.',
+    ' Use an alternative layout and framing from other variations.',
+  ];
+  const v = variants[variant] || '';
+  return `${desc.trim()}. High-quality, sharp, detailed, clean print-ready artwork suitable for print-on-demand products.${v}`;
 }

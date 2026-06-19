@@ -13,7 +13,8 @@ export interface ImageModel { id: string; label: string }
 export const CUSTOM_MODEL_ID = '__custom__';
 
 // Nhà cung cấp AI hỗ trợ. Mỗi provider có API key + danh sách model riêng.
-export type Provider = 'openrouter' | 'gemini';
+// 'xai' chỉ dùng cho chế độ TẠO MỚI (text->image, Grok) — không edit được design gốc.
+export type Provider = 'openrouter' | 'gemini' | 'xai';
 export interface ProviderInfo {
   id: Provider;
   label: string;
@@ -24,8 +25,12 @@ export interface ProviderInfo {
 export const PROVIDERS: ProviderInfo[] = [
   { id: 'openrouter', label: 'OpenRouter',    storageKey: 'OPENROUTER_API_KEY', envKey: 'VITE_OPENROUTER_API_KEY', keyUrl: 'https://openrouter.ai/keys' },
   { id: 'gemini',     label: 'Google Gemini', storageKey: 'GEMINI_API_KEY',     envKey: 'VITE_GEMINI_API_KEY',     keyUrl: 'https://aistudio.google.com/apikey' },
+  { id: 'xai',        label: 'xAI Grok',      storageKey: 'XAI_API_KEY',        envKey: 'VITE_XAI_API_KEY',        keyUrl: 'https://console.x.ai' },
 ];
 export const DEFAULT_PROVIDER: Provider = 'openrouter';
+
+// Provider dùng cho chế độ EDIT (nhận ảnh tham chiếu để sửa). xAI Grok không edit được.
+export const EDIT_PROVIDERS: Provider[] = ['openrouter', 'gemini'];
 
 export const getProviderInfo = (p: Provider): ProviderInfo =>
   PROVIDERS.find((x) => x.id === p) ?? PROVIDERS[0];
@@ -42,6 +47,10 @@ export const MODELS_BY_PROVIDER: Record<Provider, ImageModel[]> = {
   gemini: [
     { id: 'gemini-3-pro-image-preview', label: '🍌 Nano Banana Pro' },
     { id: 'gemini-2.5-flash-image',     label: '🍌 Nano Banana / Flash' },
+  ],
+  // xAI Grok — chỉ TẠO ẢNH MỚI từ mô tả (không nhận ảnh tham chiếu để edit).
+  xai: [
+    { id: 'grok-2-image-1212', label: 'Grok 2 Image (xAI)' },
   ],
 };
 
@@ -83,6 +92,7 @@ export async function fetchOpenRouterImageModels(key?: string): Promise<ImageMod
 }
 const geminiUrl = (model: string, key: string): string =>
   `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+const XAI_IMAGE_URL = 'https://api.x.ai/v1/images/generations';
 
 type MediaResult = { mediaId: string; base64: string; mimeType: string };
 
@@ -221,6 +231,51 @@ async function generateWithGemini(opts: GenOpts, key: string): Promise<MediaResu
   throw new Error(txt || 'Gemini không trả về ảnh. Thử lại, đổi mô tả hoặc đổi model.');
 }
 
+/**
+ * Tạo ảnh MỚI từ mô tả qua xAI Grok (api.x.ai /images/generations).
+ * Lưu ý: API này KHÔNG nhận ảnh tham chiếu để edit, KHÔNG có tham số tỉ lệ/size
+ * -> chỉ dùng cho chế độ "Tạo mới"; referenceImageMediaIds & aspectRatio bị bỏ qua.
+ */
+async function generateWithXAI(opts: GenOpts, key: string): Promise<MediaResult> {
+  const res = await fetch(XAI_IMAGE_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: opts.model || 'grok-2-image-1212',
+      prompt: opts.prompt,
+      n: 1,
+      response_format: 'b64_json',
+    }),
+  });
+
+  if (!res.ok) {
+    let msg = `xAI lỗi ${res.status}`;
+    try { const j = await res.json(); const e = j?.error; msg = (typeof e === 'string' ? e : e?.message) || msg; } catch {}
+    throw new Error(msg);
+  }
+
+  const data = await res.json();
+  const item = data?.data?.[0];
+  if (item?.b64_json) return storeResult('image/jpeg', item.b64_json);
+
+  // Trường hợp trả về URL -> tải về rồi chuyển base64.
+  if (item?.url) {
+    const r = await fetch(item.url);
+    if (!r.ok) throw new Error(`Lỗi ${r.status} khi tải ảnh xAI về.`);
+    const blob = await r.blob();
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error || new Error('Lỗi đọc ảnh xAI'));
+      reader.readAsDataURL(blob);
+    });
+    const m = /^data:([^;]+);base64,(.*)$/.exec(dataUrl);
+    if (m) return storeResult(m[1], m[2]);
+  }
+
+  throw new Error('xAI không trả về ảnh. Thử lại hoặc đổi mô tả.');
+}
+
 export const Flow = {
   media: {
     // filter giữ lại cho tương thích chữ ký gốc, hiện luôn lọc ảnh.
@@ -231,9 +286,9 @@ export const Flow = {
     image: async (opts: GenOpts & { provider?: Provider }): Promise<MediaResult> => {
       const provider = opts.provider ?? DEFAULT_PROVIDER;
       const key = getApiKey(provider);
-      return provider === 'gemini'
-        ? generateWithGemini(opts, key)
-        : generateWithOpenRouter(opts, key);
+      if (provider === 'gemini') return generateWithGemini(opts, key);
+      if (provider === 'xai') return generateWithXAI(opts, key);
+      return generateWithOpenRouter(opts, key);
     },
   },
 
