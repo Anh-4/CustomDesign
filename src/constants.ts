@@ -1,0 +1,63 @@
+// Số mẫu output tạo song song để Anh4 chọn.
+export const NUM_OPTIONS = 2;
+
+/** '#RRGGBB' -> 'R, G, B' (để ghi rõ trong prompt cho AI bám đúng màu). */
+export function hexToRgb(hex: string): string {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+}
+
+export interface ChangeSpec {
+  newText: string;              // ô2 (đã trim)
+  newNumber: string;            // ô3 (đã trim)
+  hasReplacementImage: boolean; // ô4 có ảnh hay không
+  textColor: string | null;    // ô5 hex hoặc null (giữ màu gốc)
+  numberColor: string | null;  // ô5 hex hoặc null (giữ màu gốc)
+}
+
+/**
+ * Dựng prompt CUSTOM DESIGN: AI EDIT design gốc (IMAGE 1), chỉ thay text/số/ảnh được chỉ định,
+ * giữ NGUYÊN mọi thứ còn lại (style, filter, hiệu ứng, bố cục, kích thước).
+ * Ảnh tham chiếu theo thứ tự: [IMAGE 1 = design gốc] (, IMAGE 2 = ảnh thay thế nếu có).
+ */
+export function buildCustomPrompt(spec: ChangeSpec, variant: number): string {
+  const base = `You are a professional design editor. Your job is to EDIT an existing, finished design, changing ONLY the specific elements requested below while keeping everything else byte-for-byte faithful to the original.
+
+REFERENCE IMAGES (in this EXACT order):
+- IMAGE 1 — THE ORIGINAL DESIGN: a complete, finished design. This is the canvas you must edit. You MUST preserve its exact layout, composition, art style, color grading, filters, textures, lighting, shadows, effects, typography/font style, and EVERY graphic element — except the specific elements listed under CHANGES below.${
+    spec.hasReplacementImage
+      ? `\n- IMAGE 2 — REPLACEMENT IMAGE: a new picture to place INTO the design, replacing the existing photo/image element. Fit it into the SAME position, size, framing, crop, masking and styling as the image element it replaces, so it blends seamlessly and looks native to the original design.`
+      : ''
+  }`;
+
+  const changes: string[] = [];
+  if (spec.newText) {
+    changes.push(`- TEXT: replace the wording of the text in the design with: "${spec.newText}". Keep the EXACT same font, size, weight, style, letter-spacing, effects, position and alignment as the original text. ONLY the wording changes.`);
+  }
+  if (spec.newNumber) {
+    changes.push(`- NUMBER: replace the number shown in the design with: "${spec.newNumber}". Keep the exact same font, size, style, effects and position as the original number. ONLY the digits change.`);
+  }
+  if (spec.hasReplacementImage) {
+    changes.push(`- IMAGE: replace the existing photo/image element with IMAGE 2, matching the original element's exact placement, size, crop and styling.`);
+  }
+  const changeBlock = `\n\nCHANGES TO APPLY (change ONLY these — nothing else):\n${changes.join('\n')}`;
+
+  const colorLines: string[] = [];
+  if (spec.textColor) colorLines.push(`- Render the TEXT in this exact color: ${spec.textColor} (RGB ${hexToRgb(spec.textColor)}).`);
+  if (spec.numberColor) colorLines.push(`- Render the NUMBER in this exact color: ${spec.numberColor} (RGB ${hexToRgb(spec.numberColor)}).`);
+  const colorBlock = colorLines.length
+    ? `\n\nCOLOR OVERRIDES (apply these colors exactly, overriding what the original shows):\n${colorLines.join('\n')}`
+    : '';
+
+  const rules = `\n\nSTRICT RULES:
+- Do NOT redesign, restyle, recolor, move, add or remove ANY part of the original design other than the elements explicitly listed under CHANGES.
+- Preserve IMAGE 1's exact aspect ratio, resolution, framing and crop — the output must look like the SAME design with only the requested elements swapped.
+- Keep the original's print quality: crisp edges, the same effects/filters/grain, suitable for high-resolution printing.
+- Output ONE single, clean, high-resolution image of the edited design ONLY. Do NOT show IMAGE 2 separately, no borders, no extra text, no watermark.`;
+
+  const variantHint = `\n\nThis is rendering OPTION #${variant + 1} of ${NUM_OPTIONS}. Produce a clean, faithful result; you may vary only minor rendering details of the swapped elements (anti-aliasing, exact kerning, blend) — every rule above still applies identically.`;
+
+  return base + changeBlock + colorBlock + rules + variantHint;
+}

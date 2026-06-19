@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Nền tối + font đồng bộ với các app khác của studio. */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #0e0e0e;
+  font-family: 'Google Sans Text', 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  letter-spacing: 0.1px;
+  overflow: hidden;
+}
+
+/* Thanh cuộn tối. */
+.dark-scrollbar::-webkit-scrollbar { width: 4px; }
+.dark-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.dark-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+.dark-scrollbar::-webkit-scrollbar-thumb:hover { background: #444; }
+
+/* Hiệu ứng nhấp nháy khi đang tạo ảnh. */
+@keyframes shimmer { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+.animate-shimmer { animation: shimmer 1.5s infinite ease-in-out; }
