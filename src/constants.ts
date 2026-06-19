@@ -39,7 +39,7 @@ REFERENCE IMAGES (in this EXACT order):
     const findPart = spec.origText
       ? `find the existing text that reads "${spec.origText}" and replace ONLY that text with: "${spec.newText}"`
       : `replace the wording of the text in the design with: "${spec.newText}"`;
-    changes.push(`- TEXT: ${findPart}. Keep the EXACT same font, size, weight, style, letter-spacing, effects, position and alignment as the original text. ONLY the wording changes.`);
+    changes.push(`- TEXT: ${findPart}. Reproduce the new text EXACTLY and VERBATIM, character-for-character — keep the exact spelling, capitalization, spacing, punctuation, symbols and accent marks/diacritics as written. Do NOT translate, correct, rephrase, abbreviate, reorder, add or drop ANY character. Keep the EXACT same font, size, weight, style, letter-spacing, color, effects, position and alignment as the original text — only the wording is swapped.`);
   }
   if (spec.newNumber) {
     changes.push(`- NUMBER: replace the number shown in the design with: "${spec.newNumber}". Keep the exact same font, size, style, effects and position as the original number. ONLY the digits change.`);
@@ -62,6 +62,7 @@ REFERENCE IMAGES (in this EXACT order):
     : '';
 
   const rules = `\n\nSTRICT RULES:
+- TEXT FIDELITY (critical): any replacement text MUST appear in the output EXACTLY as the user typed it — character-for-character, including identical spelling, letter case, spaces, punctuation, special symbols and accent marks/diacritics. Do not "fix", localize, translate or beautify the text. If you cannot render a character faithfully, render it as-is rather than substituting it.
 - Do NOT redesign, restyle, recolor, move, add or remove ANY part of the original design other than the elements explicitly listed under CHANGES.
 - Preserve IMAGE 1's exact aspect ratio, resolution, framing and crop — the output must look like the SAME design with only the requested elements swapped.
 - Keep the original's print quality: crisp edges, the same effects/filters/grain, suitable for high-resolution printing.
