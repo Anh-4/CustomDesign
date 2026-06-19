@@ -186,10 +186,12 @@ async function generateWithOpenRouter(opts: GenOpts, key: string): Promise<Media
       'Content-Type': 'application/json',
       'X-Title': 'Custom Design AI',
     },
+    // Modalities phải khớp model: Grok Imagine chỉ hỗ trợ output 'image' -> kèm 'text' sẽ lỗi
+    // "No endpoints ... output modalities: image, text". Các model khác (Nano Banana/GPT) cần cả 'text'.
     body: JSON.stringify({
       model: opts.model,
       messages: [{ role: 'user', content }],
-      modalities: ['image', 'text'],
+      modalities: /grok|imagine/i.test(opts.model) ? ['image'] : ['image', 'text'],
       ...(opts.aspectRatio ? { image_config: { aspect_ratio: opts.aspectRatio } } : {}),
     }),
   });
