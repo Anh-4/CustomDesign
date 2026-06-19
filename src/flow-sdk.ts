@@ -79,9 +79,13 @@ export async function fetchOpenRouterImageModels(key?: string): Promise<ImageMod
   const isImageOut = (m: any) =>
     Array.isArray(m?.architecture?.output_modalities) && m.architecture.output_modalities.includes('image');
 
+  // moderated:true -> OpenRouter có lớp lọc nội dung (hay từ chối trademark/nhân vật) -> đánh dấu.
   const imageModels = list
     .filter(isImageOut)
-    .map((m) => ({ id: String(m.id), label: String(m.name || m.id) }));
+    .map((m) => ({
+      id: String(m.id),
+      label: String(m.name || m.id) + (m?.top_provider?.is_moderated ? ' · có kiểm duyệt' : ''),
+    }));
 
   // Ưu tiên các model có 'image' trong id (gemini image/nano banana, gpt image...) lên đầu, còn lại A→Z.
   imageModels.sort((a, b) => {
