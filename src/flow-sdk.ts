@@ -397,19 +397,77 @@ async function refToDataUri(mediaId: string, flatten: boolean): Promise<string |
   }
 }
 
+// ===== Nhúng DPI vào PNG (chunk pHYs) — để file in đúng 300DPI =====
+const PNG_CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function pngCrc32(bytes: Uint8Array, start: number, end: number): number {
+  let c = 0xffffffff;
+  for (let i = start; i < end; i++) c = PNG_CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function bytesToBase64(bytes: Uint8Array): string {
+  let s = '';
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CH)));
+  return btoa(s);
+}
+/** Chèn chunk pHYs (DPI) ngay sau IHDR. Lỗi -> trả nguyên PNG (vẫn đúng số pixel). */
+function injectPngDpi(base64png: string, dpi: number): string {
+  const src = base64ToBytes(base64png);
+  if (src[0] !== 0x89 || src[1] !== 0x50 || src[2] !== 0x4e || src[3] !== 0x47) return base64png;
+  const ppu = Math.round(dpi / 0.0254); // pixels/metre (300dpi -> 11811)
+  const chunk = new Uint8Array(21); // len(4)+type(4)+data(9)+crc(4)
+  const dv = new DataView(chunk.buffer);
+  dv.setUint32(0, 9);
+  chunk[4] = 0x70; chunk[5] = 0x48; chunk[6] = 0x59; chunk[7] = 0x73; // 'pHYs'
+  dv.setUint32(8, ppu); dv.setUint32(12, ppu); chunk[16] = 1; // unit = metre
+  dv.setUint32(17, pngCrc32(chunk, 4, 17));
+  const insertAt = 33; // 8 (signature) + 25 (IHDR chunk)
+  const out = new Uint8Array(src.length + 21);
+  out.set(src.subarray(0, insertAt), 0);
+  out.set(chunk, insertAt);
+  out.set(src.subarray(insertAt), insertAt + 21);
+  return bytesToBase64(out);
+}
+
 /**
- * Xoá nền -> PNG trong suốt. Flood-fill từ 4 mép ảnh: pixel nào gần màu nền (lấy trung bình 4 góc)
- * trong ngưỡng `tolerance` VÀ nối liền với mép -> đặt alpha = 0. Chỉ bỏ nền bao quanh, KHÔNG đụng
- * các vùng cùng màu nằm bên trong design. Trả base64 của ảnh PNG (có alpha).
+ * Xoá nền -> PNG trong suốt, có thể PHÓNG TO về kích thước đích (in ấn 300DPI).
+ * Pipeline: vẽ ảnh model lên canvas đích (nền trắng, smoothing cao -> cạnh mượt) -> flood-fill nhị
+ * phân từ mép -> feather (mượt biên, chống răng cưa) -> de-fringe (hết viền trắng) -> nhúng DPI.
  */
-export async function cutoutBackgroundToPng(base64: string, mimeType: string, tol = 55, feather = 1): Promise<string> {
+export async function cutoutBackgroundToPng(
+  base64: string,
+  mimeType: string,
+  opts: { targetW?: number; targetH?: number; tol?: number; feather?: number; dpi?: number } = {},
+): Promise<string> {
+  const tol = opts.tol ?? 55;
+  const feather = opts.feather ?? 1;
   const img = await loadImage(`data:${mimeType};base64,${base64}`);
-  const w = img.naturalWidth, h = img.naturalHeight;
+  const w = opts.targetW && opts.targetW > 0 ? Math.round(opts.targetW) : img.naturalWidth;
+  const h = opts.targetH && opts.targetH > 0 ? Math.round(opts.targetH) : img.naturalHeight;
+
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Không tạo được canvas');
-  ctx.drawImage(img, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  (ctx as any).imageSmoothingQuality = 'high';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h); // phóng/thu ảnh model về kích thước đích
 
   const imgData = ctx.getImageData(0, 0, w, h);
   const d = imgData.data;
@@ -422,9 +480,9 @@ export async function cutoutBackgroundToPng(base64: string, mimeType: string, to
   for (const c of corners) { br += d[c]; bg += d[c + 1]; bb += d[c + 2]; }
   br /= 4; bg /= 4; bb /= 4;
 
-  // 1) Flood-fill nhị phân từ mép: pixel nối với mép & gần màu nền -> alpha 0 (nền), còn lại 1.
+  // 1) Flood-fill nhị phân từ mép: pixel nối mép & gần màu nền -> alpha 0; còn lại 255.
   const tol2 = tol * tol;
-  const alpha = new Float32Array(N).fill(1);
+  const alpha = new Uint8Array(N).fill(255);
   const visited = new Uint8Array(N);
   const stack: number[] = [];
   for (let x = 0; x < w; x++) { stack.push(x); stack.push((h - 1) * w + x); }
@@ -445,30 +503,32 @@ export async function cutoutBackgroundToPng(base64: string, mimeType: string, to
   }
 
   // 2) Feather: box-blur alpha quanh biên -> chuyển mượt (chống răng cưa).
+  let aArr: Uint8Array = alpha;
   if (feather > 0) {
-    const tmp = new Float32Array(N);
+    const tmp = new Uint8Array(N);
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         let s = 0, c = 0;
         for (let dy = -feather; dy <= feather; dy++) {
           const yy = y + dy; if (yy < 0 || yy >= h) continue;
+          const baseRow = yy * w;
           for (let dx = -feather; dx <= feather; dx++) {
             const xx = x + dx; if (xx < 0 || xx >= w) continue;
-            s += alpha[yy * w + xx]; c++;
+            s += alpha[baseRow + xx]; c++;
           }
         }
-        tmp[y * w + x] = s / c;
+        tmp[y * w + x] = (s / c) | 0;
       }
     }
-    alpha.set(tmp);
+    aArr = tmp;
   }
 
   // 3) Áp alpha + khử viền nền (de-fringe) cho pixel biên (0<a<1).
   for (let p = 0; p < N; p++) {
-    const a = alpha[p];
+    const a = aArr[p] / 255;
     const o = p * 4;
-    if (a >= 1) continue;
-    if (a <= 0) { d[o + 3] = 0; continue; }
+    if (a >= 0.999) continue;
+    if (a <= 0.001) { d[o + 3] = 0; continue; }
     d[o] = clamp((d[o] - br * (1 - a)) / a);
     d[o + 1] = clamp((d[o + 1] - bg * (1 - a)) / a);
     d[o + 2] = clamp((d[o + 2] - bb * (1 - a)) / a);
@@ -476,7 +536,11 @@ export async function cutoutBackgroundToPng(base64: string, mimeType: string, to
   }
 
   ctx.putImageData(imgData, 0, 0);
-  return canvas.toDataURL('image/png').split(',')[1] || '';
+  let out = canvas.toDataURL('image/png').split(',')[1] || '';
+  if (opts.dpi && opts.dpi > 0) {
+    try { out = injectPngDpi(out, opts.dpi); } catch { /* giữ PNG không DPI nếu lỗi */ }
+  }
+  return out;
 }
 
 export const Flow = {

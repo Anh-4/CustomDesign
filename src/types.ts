@@ -12,6 +12,8 @@ export interface InputState {
   newText: string;
   // Ô 2b: text GỐC đang có trong design cần thay (giúp AI tìm đúng chỗ khi nhận nhầm).
   origText: string;
+  // Ô 3: số GỐC đang có trong design cần thay (giúp AI tìm đúng số khi nhận nhầm).
+  origNumber: string;
   // Ô 3: số mới để thay vào design.
   newNumber: string;
   // Ô 4: ảnh thay thế (PNG/JPG) — thay vào vị trí ảnh có sẵn trong design.

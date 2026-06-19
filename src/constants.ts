@@ -13,6 +13,7 @@ export interface ChangeSpec {
   newText: string;              // ô2 (đã trim)
   origText: string;             // ô2b — text gốc cần thay (locator, đã trim)
   newNumber: string;            // ô3 (đã trim)
+  origNumber: string;           // ô3 — số gốc cần thay (locator, đã trim)
   hasReplacementImage: boolean; // ô4 có ảnh hay không
   targetDesc: string;           // mô tả nhân vật/số cần thay (locator, đã trim)
   textColor: string | null;    // ô5 hex hoặc null (giữ màu gốc)
@@ -42,7 +43,10 @@ REFERENCE IMAGES (in this EXACT order):
     changes.push(`- TEXT: ${findPart}. Reproduce the new text EXACTLY and VERBATIM, character-for-character — keep the exact spelling, capitalization, spacing, punctuation, symbols and accent marks/diacritics as written. Do NOT translate, correct, rephrase, abbreviate, reorder, add or drop ANY character. Keep the EXACT same font, size, weight, style, letter-spacing, color, the exact fill/pattern/texture and colors inside each letter, effects, position and alignment as the original text — only the wording is swapped.`);
   }
   if (spec.newNumber) {
-    changes.push(`- NUMBER: replace the number shown in the design with: "${spec.newNumber}". Keep the exact same font, size, style, effects and position as the original number. ONLY the digits change.`);
+    const findNum = spec.origNumber
+      ? `find the existing number "${spec.origNumber}" and replace ONLY it with: "${spec.newNumber}"`
+      : `replace the number shown in the design with: "${spec.newNumber}"`;
+    changes.push(`- NUMBER: ${findNum}. Keep the exact same font, size, style, color, effects and position as the original number. ONLY the digits change.`);
   }
   if (spec.hasReplacementImage) {
     changes.push(`- IMAGE: replace the existing photo/image element with IMAGE 2, matching the original element's exact placement, size, crop and styling.`);
@@ -91,7 +95,13 @@ export function buildCustomPromptConcise(spec: ChangeSpec, _variant: number): st
         : `change ONLY the lettering text to "${spec.newText}" (keep its exact font, color, size, position)`
     );
   }
-  if (spec.newNumber) changes.push(`change the number to "${spec.newNumber}" (keep the same style and position)`);
+  if (spec.newNumber) {
+    changes.push(
+      spec.origNumber
+        ? `change ONLY the number "${spec.origNumber}" to "${spec.newNumber}" (keep the same style, color and position)`
+        : `change the number to "${spec.newNumber}" (keep the same style, color and position)`
+    );
+  }
   if (spec.hasReplacementImage) changes.push(`replace the existing photo with the SECOND reference image, in the same position, size and crop`);
 
   const colors: string[] = [];

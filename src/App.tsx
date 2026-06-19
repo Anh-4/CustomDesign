@@ -8,6 +8,16 @@ import { NUM_OPTIONS, buildCustomPrompt, buildCustomPromptConcise } from './cons
 // Version hiển thị: dùng define lúc build; fallback an toàn khi dev.
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0';
 
+/** Đọc kích thước thật (px) của 1 ảnh từ data-URL. Lỗi -> {0,0}. */
+function imageNaturalSize(dataUrl: string): Promise<{ w: number; h: number }> {
+  return new Promise((resolve) => {
+    const im = new Image();
+    im.onload = () => resolve({ w: im.naturalWidth, h: im.naturalHeight });
+    im.onerror = () => resolve({ w: 0, h: 0 });
+    im.src = dataUrl;
+  });
+}
+
 /** 1 ô upload ảnh (số thứ tự + tiêu đề + mô tả; xem trước + xoá). */
 const UploadBox: React.FC<{
   index: number;
@@ -73,9 +83,10 @@ const OptionCard: React.FC<{
   result: GeneratedResult | null;
   loading: boolean;
   error: string | null;
+  downloading: boolean;
   onZoom: (src: string) => void;
-  onDownload: (r: GeneratedResult) => void;
-}> = ({ index, result, loading, error, onZoom, onDownload }) => {
+  onDownload: (r: GeneratedResult, index: number) => void;
+}> = ({ index, result, loading, error, downloading, onZoom, onDownload }) => {
   const src = result ? `data:${result.mimeType};base64,${result.base64}` : '';
   return (
     <div className="relative flex flex-col rounded-xl border border-white/10 bg-[#141414] overflow-hidden min-h-0">
@@ -83,11 +94,14 @@ const OptionCard: React.FC<{
         <span>Mẫu {index + 1}</span>
         {result && (
           <button
-            onClick={() => onDownload(result)}
-            className="flex items-center gap-1 text-amber-400 hover:text-amber-300 transition-colors"
+            onClick={() => onDownload(result, index)}
+            disabled={downloading}
+            className="flex items-center gap-1 text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span className="material-symbols-outlined text-[15px]">download</span>
-            Tải PNG
+            <span className={`material-symbols-outlined text-[15px] ${downloading ? 'animate-spin' : ''}`}>
+              {downloading ? 'progress_activity' : 'download'}
+            </span>
+            {downloading ? 'Đang xuất…' : 'Tải PNG'}
           </button>
         )}
       </div>
@@ -118,6 +132,7 @@ export default function App() {
     designImage: null,
     newText: '',
     origText: '',
+    origNumber: '',
     newNumber: '',
     replaceImage: null,
     targetDesc: '',
@@ -133,6 +148,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
+  const [downloadingIdx, setDownloadingIdx] = useState<number | null>(null);
 
   // Đọc key đã lưu của một provider.
   const readKeyFor = (p: Provider): string => {
@@ -276,6 +292,7 @@ export default function App() {
       newText: inputs.newText.trim(),
       origText: inputs.origText.trim(),
       newNumber: inputs.newNumber.trim(),
+      origNumber: inputs.origNumber.trim(),
       hasReplacementImage: !!inputs.replaceImage,
       targetDesc: inputs.targetDesc.trim(),
       textColor: inputs.useTextColor ? inputs.textColor : null,
@@ -289,15 +306,23 @@ export default function App() {
     runBatch(provider, effectiveModel, makePrompt, refs);
   };
 
-  // Tải PNG nền trong suốt: xoá nền (flood-fill từ mép) rồi xuất PNG có alpha.
-  // Lỗi xử lý -> fallback tải ảnh gốc (có nền).
-  const download = async (r: GeneratedResult) => {
+  // Tải PNG nền trong suốt, chất lượng cao: phóng về kích thước design gốc (mặc định 4500x5400),
+  // xoá nền + mượt biên + nhúng 300DPI. Lỗi -> fallback tải ảnh gốc (có nền).
+  const download = async (r: GeneratedResult, idx: number) => {
+    setDownloadingIdx(idx);
     try {
-      const pngBase64 = await cutoutBackgroundToPng(r.base64, r.mimeType);
-      await Flow.download({ base64: pngBase64, mimeType: 'image/png', filename: `custom-design-${Date.now()}.png` });
+      let tw = 4500, th = 5400; // mặc định
+      if (inputs.designImage) {
+        const dim = await imageNaturalSize(`data:${inputs.designImage.mimeType};base64,${inputs.designImage.base64}`);
+        if (dim.w > 0 && dim.h > 0) { tw = dim.w; th = dim.h; } // khớp kích thước design gốc
+      }
+      const png = await cutoutBackgroundToPng(r.base64, r.mimeType, { targetW: tw, targetH: th, dpi: 300 });
+      await Flow.download({ base64: png, mimeType: 'image/png', filename: `custom-design-${tw}x${th}-${Date.now()}.png` });
     } catch {
       const ext = (r.mimeType.split('/')[1] || 'png').replace('jpeg', 'jpg');
       await Flow.download({ base64: r.base64, mimeType: r.mimeType, filename: `custom-design-${Date.now()}.${ext}` });
+    } finally {
+      setDownloadingIdx(null);
     }
   };
 
@@ -354,15 +379,27 @@ export default function App() {
             </div>
           </div>
 
-          {/* Ô 3 — Số mới */}
-          <div className="flex flex-col gap-1.5">
-            <FieldHead index={3} title="Số mới" desc="Thay phần số trong design (giữ style gốc)" />
-            <LineInput
-              value={inputs.newNumber}
-              onChange={(v) => set('newNumber', v)}
-              placeholder="VD: 46"
-              numeric
-            />
+          {/* Ô 3 — Số (số gốc cần thay + số mới) */}
+          <div className="flex flex-col gap-2">
+            <FieldHead index={3} title="Số" desc="Thay phần số trong design (giữ style gốc)" />
+            <div className="flex flex-col gap-1">
+              <SectionLabel>Số gốc cần thay (tùy chọn)</SectionLabel>
+              <LineInput
+                value={inputs.origNumber}
+                onChange={(v) => set('origNumber', v)}
+                placeholder="VD: số hiện có '99' — báo AI thay đúng số"
+                numeric
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <SectionLabel>Số mới</SectionLabel>
+              <LineInput
+                value={inputs.newNumber}
+                onChange={(v) => set('newNumber', v)}
+                placeholder="VD: 46"
+                numeric
+              />
+            </div>
           </div>
 
           {/* Ô 4 — Ảnh thay thế */}
@@ -483,7 +520,7 @@ export default function App() {
         {hasOutput ? (
           <>
             <div className="px-5 pt-4 pb-1 text-[11px] text-white/40">
-              Chọn mẫu ưng ý → bấm <span className="text-amber-400">Tải PNG</span> ở góc mỗi mẫu (nền trong suốt, chất lượng cao, in ấn được). Bấm vào ảnh để phóng to.
+              Chọn mẫu ưng ý → bấm <span className="text-amber-400">Tải PNG</span> ở góc mỗi mẫu (nền trong suốt, phóng về kích thước design gốc/4500×5400, 300DPI, in ấn được). Bấm vào ảnh để phóng to.
             </div>
             <div className="flex-1 grid grid-cols-2 gap-3 p-4 pt-2 min-h-0">
               {Array.from({ length: NUM_OPTIONS }, (_, i) => (
@@ -493,6 +530,7 @@ export default function App() {
                   result={results[i]}
                   loading={loadingIndices.has(i)}
                   error={slotErrors[i]}
+                  downloading={downloadingIdx === i}
                   onZoom={setZoomImage}
                   onDownload={download}
                 />
